@@ -66,10 +66,7 @@
 /// ## Some caveats about compliance with the informal spec
 /// - It's entirely possible at this point that some of my implementation deviates from the spec in unintended ways. If you spot anything like that, please raise an issue :heart: :heart:
 /// - The alliteration and rhyming rules are still unimplemented.
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
-extern crate wordsworth;
 mod error;
+mod parser;
 pub mod program;
 pub use error::Error;

@@ -1,4 +1,4 @@
-use program::Rule;
+use super::program::Rule;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]

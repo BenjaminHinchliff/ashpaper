@@ -1,8 +1,9 @@
 extern crate log;
 extern crate pest;
 
-use error::Error;
+use super::error::Error;
 use pest::Parser;
+use pest_derive::Parser;
 use std::io::{self, BufRead};
 use wordsworth;
 
