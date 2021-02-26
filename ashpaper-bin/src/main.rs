@@ -40,7 +40,7 @@ extern crate ashpaper;
 extern crate clap;
 extern crate log;
 
-use clap::App;
+use clap::{App, Arg};
 use std::fs;
 
 #[cfg(not(tarpaulin_include))]
@@ -49,8 +49,26 @@ pub fn main() {
         .version(clap::crate_version!())
         .author("Shea Newton <shnewto@gmail.com>")
         .about("An AshPaper interpreter that executes poetry!")
-        .args_from_usage("<INPUT>    '.eso file to compile'")
+        .arg(
+            Arg::with_name("INPUT")
+                .help(".eso file to compile")
+                .required_unless("syllables")
+                .index(1),
+        )
+        .arg(
+            Arg::with_name("syllables")
+                .short("s")
+                .long("syllables")
+                .value_name("STRING")
+                .help("Counts number of syllables in a string and exit")
+                .takes_value(true),
+        )
         .get_matches();
+
+    if let Some(syl_str) = matches.value_of("syllables") {
+        println!("{}", ashpaper::program::count_syllables(syl_str));
+        return;
+    }
 
     env_logger::init();
 
