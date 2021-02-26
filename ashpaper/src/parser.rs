@@ -303,4 +303,56 @@ printing?
         ];
         assert_eq!(tokens, target)
     }
+
+    #[test]
+    fn print_value() {
+        let source = r#"
+fish
+print. it.
+        "#.trim();
+
+        let mut lines = source.lines();
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Store(1),
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+            Instruction {
+                instruction: InsType::PrintValue,
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+        ];
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn pop() {
+        let source = "test,";
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Pop,
+                register: Register::Register0,
+                line: source.to_string(),
+            },
+        ];
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn push() {
+        let source = "push-it";
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Push,
+                register: Register::Register0,
+                line: source.to_string(),
+            },
+        ];
+        assert_eq!(tokens, target);
+    }
 }
