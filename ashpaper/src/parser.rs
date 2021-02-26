@@ -8,7 +8,7 @@ use regex::Regex;
 /// represents a single line and its metadata
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InsType {
-    LineConditional {
+    ConditionalPush {
         prev_syllables: usize,
         cur_syllables: usize,
     },
@@ -155,7 +155,7 @@ pub fn parse(input: &str) -> Vec<Instruction> {
         } else if has_alliteration(line) {
             InsType::Goto
         } else if check_end_rhyme(last_line_option, line) {
-            InsType::LineConditional {
+            InsType::ConditionalPush {
                 prev_syllables: count_syllables(last_line_option.unwrap()),
                 cur_syllables: count_syllables(line),
             }
@@ -206,7 +206,9 @@ mod tests {
         let source = r#"
 he thrust every elf
     far back on the shelf
-"#;
+"#
+        .trim();
+
         let tokens = super::parse(source);
         let mut split = source.trim().split('\n');
         let parsed = vec![
@@ -216,7 +218,7 @@ he thrust every elf
                 line: split.next().unwrap().to_string(),
             },
             Instruction {
-                instruction: InsType::LineConditional {
+                instruction: InsType::ConditionalPush {
                     prev_syllables: 6,
                     cur_syllables: 5,
                 },
