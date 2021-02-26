@@ -281,6 +281,26 @@ fish are like trout
 
     #[test]
     fn print_char() {
+        let source = r#"
+oceania directory execution bureaucratic oceania a
+printing?
+        "#
+        .trim();
 
+        let mut lines = source.lines();
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Store(21),
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+            Instruction {
+                instruction: InsType::PrintChar,
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+        ];
+        assert_eq!(tokens, target)
     }
 }
