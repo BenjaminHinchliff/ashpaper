@@ -119,7 +119,7 @@ fn count_word_syllables(word: &str) -> usize {
     }
 }
 
-fn count_syllables(input: &str) -> usize {
+pub fn count_syllables(input: &str) -> usize {
     input
         .split(' ')
         .filter(|s| !s.is_empty())
@@ -180,7 +180,7 @@ pub fn parse(input: &str) -> Vec<Instruction> {
 
 #[cfg(test)]
 mod tests {
-    use super::{count_syllables, InsType, Instruction, Register};
+    use super::*;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -202,14 +202,14 @@ mod tests {
     }
 
     #[test]
-    fn rhyming() {
+    fn cond_push() {
         let source = r#"
 he thrust every elf
     far back on the shelf
 "#
         .trim();
 
-        let tokens = super::parse(source);
+        let tokens = parse(source);
         let mut split = source.trim().split('\n');
         let parsed = vec![
             Instruction {
@@ -227,5 +227,60 @@ he thrust every elf
             },
         ];
         assert_eq!(tokens, parsed);
+    }
+
+    #[test]
+    fn negate() {
+        let source = "tEst";
+
+        let tokens = parse(source);
+        let target = vec![Instruction {
+            instruction: InsType::Negate,
+            register: Register::Register0,
+            line: source.to_string(),
+        }];
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn multiply() {
+        let source = "  Test";
+        let tokens = parse(source);
+        let target = vec![Instruction {
+            instruction: InsType::Multiply,
+            register: Register::Register1,
+            line: source.to_string(),
+        }];
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn add() {
+        let source = r#"
+fish are like trout
+    birds as food
+"#
+        .trim();
+
+        let mut lines = source.lines();
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Add,
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+            Instruction {
+                instruction: InsType::Add,
+                register: Register::Register1,
+                line: lines.next().unwrap().to_string(),
+            },
+        ];
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn print_char() {
+
     }
 }
