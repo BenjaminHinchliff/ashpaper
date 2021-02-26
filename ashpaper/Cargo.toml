@@ -19,12 +19,8 @@ name = "ashpaper"
 path = "src/lib.rs"
 
 [dependencies]
-wordsworth = "^0.1.0"
-pest = "2.1.2"
-pest_derive = "2.1.0"
 log = "0.4"
 thiserror = "1.0.24"
-failure = "0.1.8"
 regex = "1.4.3"
 lazy_static = "1.4.0"
 cmudict-fast = "0.6.0"
