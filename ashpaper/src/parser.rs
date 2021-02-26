@@ -1,6 +1,7 @@
 use std::cmp;
 
-use cmudict_fast::{self as cmudict, Cmudict};
+use cmudict_fast::Cmudict;
+use cmudict_fast::{self as cmudict};
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -11,16 +12,17 @@ pub enum InsType {
         prev_syllables: usize,
         cur_syllables: usize,
     },
-    Compare,
+    ConditionalGoto(usize),
     Negate,
     Multiply,
     Add,
     PrintChar,
-    Print,
+    PrintValue,
     Pop,
     Push,
     Goto,
     Store(usize),
+    Noop,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -66,13 +68,29 @@ fn has_alliteration(input: &str) -> bool {
     false
 }
 
+fn check_end_rhyme(last_line_option: Option<&str>, cur_line: &str) -> bool {
+    if let Some(last_line) = last_line_option {
+        // end-rhyme handling
+        if let (Some(last_line_word), Some(last_word)) = (
+            last_line.split(' ').rev().next(),
+            cur_line.split(' ').rev().next(),
+        ) {
+            if let (Some(last_line_rule), Some(last_rule)) =
+                (CMUDICT.get(last_line_word), CMUDICT.get(last_word))
+            {
+                return cmudict::rhymes(&last_line_rule, &last_rule);
+            }
+        }
+    }
+    false
+}
+
 fn approximate_syllables(word: &str) -> usize {
     let clusters: Vec<_> = VOWEL_CLUSTER_RE.split(word).collect();
     const DIPHTHONGS: &[&'static str] = &[
         "ai", "au", "ay", "ea", "ee", "ei", "ey", "oa", "oe", "oi", "oo", "ou", "oy", "ua", "ue",
         "ui",
     ];
-    println!("{:?}", clusters);
     let mut count: usize = 0;
     for cluster in clusters {
         count += if DIPHTHONGS.contains(&cluster) {
@@ -104,74 +122,57 @@ fn count_word_syllables(word: &str) -> usize {
 fn count_syllables(input: &str) -> usize {
     input
         .split(' ')
-        .filter(|w| !w.is_empty())
+        .filter(|s| !s.is_empty())
         .map(|w| count_word_syllables(w))
         .sum()
-}
-
-fn check_end_rhyme(last_line_option: Option<&str>, cur_line: &str) -> bool {
-    if let Some(last_line) = last_line_option {
-        // end-rhyme handling
-        if let (Some(last_line_word), Some(last_word)) = (
-            last_line.split(' ').rev().next(),
-            cur_line.split(' ').rev().next(),
-        ) {
-            if let (Some(last_line_rule), Some(last_rule)) =
-                (CMUDICT.get(last_line_word), CMUDICT.get(last_word))
-            {
-                return cmudict::rhymes(&last_line_rule, &last_rule);
-            }
-        }
-    }
-    false
 }
 
 pub fn parse(input: &str) -> Vec<Instruction> {
     let mut last_line_option: Option<&str> = None;
     let mut lines = Vec::new();
-    for line in input.split('\n') {
+    for line in input.lines() {
         // short-circuit on noop
-        if line != "" {
-            // everything else
-            let insType = if line.contains('/') {
-                InsType::Compare
-            } else if INT_CAP_RE.is_match(line) {
-                InsType::Negate
-            } else if CAP_RE.is_match(line) {
-                InsType::Multiply
-            } else if SIMILIE_RE.is_match(line) {
-                InsType::Add
-            } else if line.contains('?') {
-                InsType::PrintChar
-            } else if line.contains('.') {
-                InsType::Print
-            } else if line.contains(',') {
-                InsType::Pop
-            } else if line.contains('-') {
-                InsType::Push
-            } else if has_alliteration(line) {
-                InsType::Goto
-            } else if check_end_rhyme(last_line_option, line) {
-                println!("{:?}", last_line_option);
-                InsType::LineConditional {
-                    prev_syllables: count_syllables(last_line_option.unwrap()),
-                    cur_syllables: count_syllables(line),
-                }
-            } else {
-                InsType::Store(count_syllables(line))
-            };
-            let register = if WS_START_RE.is_match(line) {
-                Register::Register1
-            } else {
-                Register::Register0
-            };
-            let ins = Instruction {
-                instruction: insType,
-                register,
-                line: line.to_string(),
-            };
-            lines.push(ins);
-        }
+
+        // everything else
+        let ins_type = if line.is_empty() {
+            InsType::Noop
+        } else if line.contains('/') {
+            InsType::ConditionalGoto(count_syllables(line))
+        } else if INT_CAP_RE.is_match(line) {
+            InsType::Negate
+        } else if CAP_RE.is_match(line) {
+            InsType::Multiply
+        } else if SIMILIE_RE.is_match(line) {
+            InsType::Add
+        } else if line.contains('?') {
+            InsType::PrintChar
+        } else if line.contains('.') {
+            InsType::PrintValue
+        } else if line.contains(',') {
+            InsType::Pop
+        } else if line.contains('-') {
+            InsType::Push
+        } else if has_alliteration(line) {
+            InsType::Goto
+        } else if check_end_rhyme(last_line_option, line) {
+            InsType::LineConditional {
+                prev_syllables: count_syllables(last_line_option.unwrap()),
+                cur_syllables: count_syllables(line),
+            }
+        } else {
+            InsType::Store(count_syllables(line))
+        };
+        let register = if WS_START_RE.is_match(line) {
+            Register::Register1
+        } else {
+            Register::Register0
+        };
+        let ins = Instruction {
+            instruction: ins_type,
+            register,
+            line: line.trim_end().to_string(),
+        };
+        lines.push(ins);
         last_line_option = Some(line);
     }
     lines
@@ -179,7 +180,7 @@ pub fn parse(input: &str) -> Vec<Instruction> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InsType, Instruction, Register};
+    use super::{count_syllables, InsType, Instruction, Register};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -192,10 +193,12 @@ mod tests {
 
     #[test]
     fn syllable_counting() {
-        let exact = super::count_syllables("antidisestablishmentarianism");
+        let exact = count_syllables("antidisestablishmentarianism");
         assert_eq!(exact, 12);
-        let approx = super::count_syllables("supercalifragilisticexpialidocious");
+        let approx = count_syllables("supercalifragilisticexpialidocious");
         assert_eq!(approx, 15);
+        let misc = count_syllables("a lovely poem");
+        assert_eq!(misc, 5);
     }
 
     #[test]
