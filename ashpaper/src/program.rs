@@ -26,6 +26,10 @@ impl Memory {
         }
     }
 
+    fn push_to_stack(&mut self, val: i64) {
+        self.stack.push(val);
+    }
+
     fn push(&mut self, register: Register) {
         match register {
             Register::Register0 => self.stack.push(self.register0),
@@ -98,46 +102,45 @@ pub fn execute(program: &str) -> Result<String, Error> {
     'outer: while let Some(ins) = instructions.get(instruction_pointer) {
         let Instruction {
             instruction,
-            register,
+            register: reg,
             ref line,
         } = *ins;
 
         match instruction {
             InsType::ConditionalGoto(syllables) => {
-                if mem.get_active(register) > syllables as i64 {
-                    instruction_pointer = ((mem.get_inactive(register).abs() as u64)
-                        % (instructions.len() as u64))
-                        as usize;
+                if mem.get_active(reg) > syllables as i64 {
+                    instruction_pointer =
+                        (mem.get_inactive(reg).abs() as usize) % (instructions.len() as usize);
                     continue 'outer;
                 }
             }
-            InsType::Negate => {
-                mem.negate(register);
-            }
-            InsType::Multiply => {
-                mem.multiply(register);
-            }
-            InsType::Add => {
-                mem.add(register);
-            }
+            InsType::Negate => mem.negate(reg),
+            InsType::Multiply => mem.multiply(reg),
+            InsType::Add => mem.add(reg),
             InsType::PrintChar => {
-                let printable =
-                    (mem.get_active(register).abs() as u64 % u64::from(std::u8::MAX)) as u8;
+                let printable = (mem.get_active(reg).abs() % std::u8::MAX as i64) as u8;
                 output = format!("{}{}", output, printable as char);
             }
-            InsType::PrintValue => {
-                output = format!("{}{}", output, mem.get_active(register));
+            InsType::PrintValue => output = format!("{}{}", output, mem.get_active(reg)),
+            InsType::Pop => mem.pop(reg),
+            InsType::Push => mem.push(reg),
+            InsType::Store(syllables) => mem.store_syllables(reg, syllables as i64),
+            InsType::ConditionalPush {
+                prev_syllables,
+                cur_syllables,
+            } => {
+                if mem.get_active(Register::Register0) < mem.get_inactive(Register::Register1) {
+                    mem.push_to_stack(prev_syllables as i64);
+                } else {
+                    mem.push_to_stack(cur_syllables as i64);
+                }
             }
-            InsType::Pop => {
-                mem.pop(register);
+            InsType::Goto => {
+                instruction_pointer =
+                    (mem.get_active(reg).abs() as usize) % (instructions.len() as usize);
+                continue 'outer;
             }
-            InsType::Push => {
-                mem.push(register);
-            }
-            InsType::Store(syllables) => {
-                mem.store_syllables(register, syllables as i64);
-            }
-            _ => {}
+            InsType::Noop => (),
         }
 
         log::info!(
