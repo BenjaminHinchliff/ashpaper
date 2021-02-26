@@ -1,4 +1,3 @@
-use super::program::Rule;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,12 +14,6 @@ impl fmt::Display for Error {
             Error::InputError(ref s) => write!(f, "{}", s),
             Error::ProgramError(ref s) => write!(f, "{}", s),
         }
-    }
-}
-
-impl From<pest::error::Error<Rule>> for Error {
-    fn from(err: pest::error::Error<Rule>) -> Self {
-        Error::ParseError(format!("{}", err))
     }
 }
 
@@ -49,23 +42,6 @@ mod tests {
     fn io_err() {
         let err_str = "IO Errored!";
         let error = std::io::Error::new(std::io::ErrorKind::Other, err_str);
-
-        assert_eq!(err_str.to_string(), format!("{}", Error::from(error)));
-    }
-
-    #[test]
-    fn pest_err() {
-        let err_str = " --> 1:1\n  |\n1 | \n  | ^---\n  |\n  = unexpected pop; expected push";
-
-        let input = "";
-        let pos = pest::Position::from_start(input);
-        let error = pest::error::Error::new_from_pos(
-            pest::error::ErrorVariant::ParsingError {
-                positives: vec![Rule::push],
-                negatives: vec![Rule::pop],
-            },
-            pos,
-        );
 
         assert_eq!(err_str.to_string(), format!("{}", Error::from(error)));
     }
