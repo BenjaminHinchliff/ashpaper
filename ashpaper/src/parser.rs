@@ -309,7 +309,8 @@ printing?
         let source = r#"
 fish
 print. it.
-        "#.trim();
+        "#
+        .trim();
 
         let mut lines = source.lines();
         let tokens = parse(source);
@@ -332,13 +333,11 @@ print. it.
     fn pop() {
         let source = "test,";
         let tokens = parse(source);
-        let target = vec![
-            Instruction {
-                instruction: InsType::Pop,
-                register: Register::Register0,
-                line: source.to_string(),
-            },
-        ];
+        let target = vec![Instruction {
+            instruction: InsType::Pop,
+            register: Register::Register0,
+            line: source.to_string(),
+        }];
         assert_eq!(tokens, target);
     }
 
@@ -346,13 +345,11 @@ print. it.
     fn push() {
         let source = "push-it";
         let tokens = parse(source);
-        let target = vec![
-            Instruction {
-                instruction: InsType::Push,
-                register: Register::Register0,
-                line: source.to_string(),
-            },
-        ];
+        let target = vec![Instruction {
+            instruction: InsType::Push,
+            register: Register::Register0,
+            line: source.to_string(),
+        }];
         assert_eq!(tokens, target);
     }
 }

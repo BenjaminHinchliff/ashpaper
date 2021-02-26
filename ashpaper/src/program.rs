@@ -1,8 +1,8 @@
 use super::error::Error;
 use super::parser::Register;
 
-use super::parser::{self, InsType, Instruction};
 pub use super::parser::count_syllables;
+use super::parser::{self, InsType, Instruction};
 
 #[derive(Debug, Clone)]
 struct Memory {
