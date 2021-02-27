@@ -31,9 +31,9 @@
 //! ```
 //! Using this library, you can run it with a program that looked like this:
 //! ```rust
-//! extern crate ashpaper;
-//!
 //! use std::fs;
+//!
+//! use ashpaper_plus as ashpaper;
 //!
 //! pub fn main() {
 //!    let contents = "
