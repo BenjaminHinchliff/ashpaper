@@ -1,3 +1,5 @@
+name: Rust Tests and Coverage
+
 on:
   pull_request:
     branches:
@@ -41,7 +43,7 @@ jobs:
         with:
           command: test
       - name: on poem
-        run: cargo run ashpaper-bin/poems/lovely-poem.eso
+        run: cargo run --features cli poems/lovely-poem.eso
 
   test-macos-latest-nightly:
     name: macos-latest test suite nightly
@@ -59,7 +61,7 @@ jobs:
         with:
           command: test
       - name: on poem
-        run: cargo run ashpaper-bin/poems/lovely-poem.eso
+        run: cargo run --features cli poems/lovely-poem.eso
 
   test-windows-latest-stable:
     name: windows-latest test suite stable
@@ -77,7 +79,7 @@ jobs:
         with:
           command: test
       - name: on poem
-        run: cargo run ashpaper-bin/poems/lovely-poem.eso
+        run: cargo run --features cli poems/lovely-poem.eso
 
   test-windows-latest-nightly:
     name: windows-latest test suite nightly
@@ -95,7 +97,7 @@ jobs:
         with:
           command: test
       - name: on poem
-        run: cargo run ashpaper-bin/poems/lovely-poem.eso
+        run: cargo run --features cli poems/lovely-poem.eso
 
   test-ubuntu-latest-stable-with-coverage:
     name: ubuntu-latest test suite stable with coverage
