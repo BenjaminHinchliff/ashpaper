@@ -5,29 +5,74 @@
 [![Crates.io](https://img.shields.io/crates/d/ashpaper.svg)](https://crates.io/crates/ashpaper)
 -->
 
-# AshPaper
-An inpterpreter for the Esopo language AshPaper conceived by [William Hicks](https://github.com/wphicks). You can read about it and the Esopo project in Willian Hick's own words [here](https://wphicks.github.io/esopo/). Daniel Temkin also wrote about it on esoteric.codes, you can read that [here](https://esoteric.codes/blog/esopo-turing-complete-poetry). And of course the spec! Checkout that out [here](https://github.com/wphicks/Esopo/blob/master/AshPaper/informal_specs.txt).
+# AshPaper Plus
+A fully spec complaint inpterpreter for the Esopo language AshPaper conceived by [William Hicks](https://github.com/wphicks). You can read about it and the Esopo project in Willian Hick's own words [here](https://wphicks.github.io/esopo/). Daniel Temkin also wrote about it on esoteric.codes, you can read that [here](https://esoteric.codes/blog/esopo-turing-complete-poetry). And of course the spec! Checkout that out [here](https://github.com/wphicks/Esopo/blob/master/AshPaper/informal_specs.txt).
+
+## Installation
+
+### CLI
+```bash
+cargo install --features cli ashpaper-plus
+```
+
+### Library
+add this to your `cargo.toml`
+```toml
+ashpaper-plus = "0.4.0"
+```
+
+## Usage
+
+### From the CLI
+```bash
+# execute a program
+ashpaper poems/lovely-poem.eso # prints 24
+# count syllables
+ashpaper -s "hello world, born to think and not to feel" # prints 10
+```
+
+### As a Library
+```rust
+use std::fs;
+
+use ashpaper_plus as ashpaper;
+
+pub fn main() {
+    let fname = "lovely-poem.eso";
+    let contents = fs::read_to_string(fname).expect("Something went wrong reading input file!");
+    print!("{}", ashpaper::program::execute(&contents));
+}
+```
+
+Will produce the following String:
+```txt
+24
+```
 
 ## How it works
 
 Poetry is your program.
 
 You have two registers at your disposal, r0 and r1 which store signed integers (`i64`).
-You also have an stack which can store signed integers (bounds are only that of `Vec<i64>`).
+You also have an stack which can store signed integers (bounds are only that of `Vec<i64>` (`isize::MAX = 9_223_372_036_854_775_807`)).
 
-Here are the instructions at your disposal (in order that they get precedence):
-- _End rhyme with previous line_: Unimplemented.
-- Line contains `/`: If the value in the active register is greater than the number of syllables in the line, go to the line number that corresponds to the value in the **non-active** register. If abs(n) <= lines then n, else n % lines.
-- _Capital letter appears inside a word_: Negate the active register.
-- _Capital letter appears at the beginning of a word_: Multiply registers and store result in the active register.
-- _Line contains the words 'like' or 'as'_: Add registers and store in the active register.
-- _Line contains `?`_: Print ASCII character associated with value of the active register. If abs(n) <= u8::MAX n, else n % u8::MAX.
-- _Line contains `.`_: Print integer value of the active register.
-- _Line contains `,`_: Pop from the stack and store in the active register.
-- _Line contains `-`_: Push the value of the active register to the stack.
-- _Alleteration of consecutive words_: Unimplemented.
-- _Blank line_: no-op.
-- _Everything else_: Store number of syllables in the line to the active register.
+The register is chosen based on if a line is indented - if so, r1 and if not r0
+
+Here are the instructions at your disposal (in order of precedence):
+- *End rhyme with previous line*:If register 0 < register 1, push the number of
+syllables present in the previous line to the stack. Otherwise, push the number of
+syllables in the current line to the stack.
+- *Line contains `/`*: If the value in the active register is greater than the number of syllables in the line, go to the line number that corresponds to the value in the **non-active** register. If abs(n) <= lines then n, else n % lines.
+- *Capital letter appears inside a word*: Negate the active register.
+- *Capital letter appears at the beginning of a word*: Multiply registers and store result in the active register.
+- *Line contains the words 'like' or 'as'*: Add registers and store in the active register.
+- *Line contains `?`*: Print ASCII character associated with value of the active register. If abs(n) <= u8::MAX n, else n % u8::MAX.
+- *Line contains `.`*: Print integer value of the active register.
+- *Line contains `,`*: Pop from the stack and store in the active register.
+- *Line contains `-`*: Push the value of the active register to the stack.
+- *Alleteration of consecutive words*: Goto line indicated by active register
+- *Blank line*: no-op.
+- *Everything else*: Store number of syllables in the line to the active register.
 
 
 Let's take this poem in a file called `lovely-poem.eso`. This poem-program (poegram‽) calculates factorials and input in the number of syllables in the title. (I learned a lot from reading the poem "other woodwork" by William Hicks)
@@ -50,28 +95,8 @@ re/cur
 poem or a calculator or nothing
 how lovely can it be?
 ```
-Using this library, you can run it with a program that looked like this:
-```rust
-extern crate ashpaper;
 
-use std::fs;
-
-pub fn main() {
-    let fname = "lovely-poem.eso";
-    let contents = fs::read_to_string(fname).expect("Something went wrong reading input file!");
-    match ashpaper::program::execute(&contents) {
-        Ok(res) => print!("{}", res),
-        Err(e) => eprintln!("{}", e),
-    }
-}
-```
-
-And it will produce the following String:
-```txt
-24
-```
-
-When `RUST_LOG=info` is set and the caller initializes logging, you can get at program evaluation info. Here's what `lovely-poem.eso` looks like.
+When `RUST_LOG=info` is set in the envrionment varables for the cli, you can get at program evaluation info. Here's what `lovely-poem.eso` looks like.
 ```txt
 instruction                                         |  r0  |  r1  |  stack
 --------------------------------------------------- | ---- | ---- | -------
@@ -100,10 +125,9 @@ in the title, count them, as one counts             |  2   |  -1  | [12]
 re/cur                                              |  2   |  2   | [24]
     sion works too, in poems, programs, and this    |  2   |  24  | []
        a lovely.                                    |  2   |  24  | []
-poem or a calculator or nothing                     |  10  |  24  | []
+poem or calculator or nothing                     |  10  |  24  | []
 how lovely can it be?                               |  10  |  24  | []
 ```
 
-## Some caveats about compliance with the informal spec
+## Caveat about compliance with the informal spec
 - It is possible at this point that my implementation deviates from the spec in unintended ways. If you spot anything like that, please raise an issue :heart: :heart:
-- The alliteration and rhyming rules are still unimplemented.
