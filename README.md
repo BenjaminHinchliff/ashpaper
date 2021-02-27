@@ -1,7 +1,9 @@
-[![.github/workflows/ci.yml](https://github.com/shnewto/ashpaper/workflows/.github/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shnewto/ashpaper/actions)
-[![codecov](https://codecov.io/gh/shnewto/ashpaper/branch/main/graph/badge.svg?token=koBLxpVvcw)](https://codecov.io/gh/shnewto/ashpaper)
+[![.github/workflows/ci.yml](https://github.com/BenjaminHinchliff/ashpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/BenjaminHinchliff/ashpaper/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/BenjaminHinchliff/ashpaper/branch/main/graph/badge.svg?token=SED7QMHHER)](https://codecov.io/gh/BenjaminHinchliff/ashpaper)
+<!--
 [![Crates.io Version](https://img.shields.io/crates/v/ashpaper.svg)](https://crates.io/crates/ashpaper)
 [![Crates.io](https://img.shields.io/crates/d/ashpaper.svg)](https://crates.io/crates/ashpaper)
+-->
 
 # AshPaper
 An inpterpreter for the Esopo language AshPaper conceived by [William Hicks](https://github.com/wphicks). You can read about it and the Esopo project in Willian Hick's own words [here](https://wphicks.github.io/esopo/). Daniel Temkin also wrote about it on esoteric.codes, you can read that [here](https://esoteric.codes/blog/esopo-turing-complete-poetry). And of course the spec! Checkout that out [here](https://github.com/wphicks/Esopo/blob/master/AshPaper/informal_specs.txt).
