@@ -134,8 +134,13 @@ pub fn parse(input: &str) -> Vec<Instruction> {
         // short-circuit on noop
 
         // everything else
-        let ins_type = if line.is_empty() {
+        let ins_type = if line.trim().is_empty() {
             InsType::Noop
+        } else if check_end_rhyme(last_line_option, line) {
+            InsType::ConditionalPush {
+                prev_syllables: count_syllables(last_line_option.unwrap()),
+                cur_syllables: count_syllables(line),
+            }
         } else if line.contains('/') {
             InsType::ConditionalGoto(count_syllables(line))
         } else if INT_CAP_RE.is_match(line) {
@@ -154,11 +159,6 @@ pub fn parse(input: &str) -> Vec<Instruction> {
             InsType::Push
         } else if has_alliteration(line) {
             InsType::Goto
-        } else if check_end_rhyme(last_line_option, line) {
-            InsType::ConditionalPush {
-                prev_syllables: count_syllables(last_line_option.unwrap()),
-                cur_syllables: count_syllables(line),
-            }
         } else {
             InsType::Store(count_syllables(line))
         };
@@ -355,6 +355,94 @@ print. it.
 
     #[test]
     fn store() {
-        let source = "";
+        let source = "somebody once";
+        let tokens = parse(source);
+        let target = vec![Instruction {
+            instruction: InsType::Store(4),
+            register: Register::Register0,
+            line: source.to_string(),
+        }];
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn conditional_push() {
+        let source = r#"
+sombody once told me
+the world was gonna roll me
+        "#
+        .trim();
+
+        let mut lines = source.lines();
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Store(6),
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+            Instruction {
+                instruction: InsType::ConditionalPush {
+                    prev_syllables: 6,
+                    cur_syllables: 7,
+                },
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+        ];
+
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn goto() {
+        let source = "sells sea shells";
+        let tokens = parse(source);
+        let target = vec![Instruction {
+            instruction: InsType::Goto,
+            register: Register::Register0,
+            line: source.to_string(),
+        }];
+
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn noop() {
+        let source = r#"
+"#;
+        let tokens = parse(source);
+        let target = vec![Instruction {
+            instruction: InsType::Noop,
+            register: Register::Register0,
+            line: "".to_string(),
+        }];
+
+        assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn registers() {
+        let source = r#"
+register zero
+    register one
+        "#
+        .trim();
+        let mut lines = source.lines();
+        let tokens = parse(source);
+        let target = vec![
+            Instruction {
+                instruction: InsType::Store(5),
+                register: Register::Register0,
+                line: lines.next().unwrap().to_string(),
+            },
+            Instruction {
+                instruction: InsType::Store(4),
+                register: Register::Register1,
+                line: lines.next().unwrap().to_string(),
+            },
+        ];
+
+        assert_eq!(tokens, target);
     }
 }
