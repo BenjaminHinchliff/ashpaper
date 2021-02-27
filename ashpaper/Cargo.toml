@@ -23,7 +23,7 @@ log = "0.4"
 thiserror = "1.0.24"
 regex = "1.4.3"
 lazy_static = "1.4.0"
-cmudict-fast = "0.6.0"
+cmudict-fast = "0.8.0"
 
 [dev-dependencies]
 pretty_assertions = "0.6.1"
