@@ -18,7 +18,7 @@ cargo install --features cli ashpaper-plus
 ### Library
 add this to your `cargo.toml`
 ```toml
-ashpaper-plus = "0.4.0"
+ashpaper-plus = "0.4"
 ```
 
 ## Usage
