@@ -1,15 +1,19 @@
 [package]
-name = "ashpaper"
+name = "ashpaper-plus"
 description = "Rust Inpterpreter for Esopo language AshPaper conceived by William Hicks"
 edition = "2018"
 
-authors = ["Shea Newton <shnewto@gmail.com>", "@CrockAgile"]
+authors = [
+    "Benjamin Hinchliff <benjamin.hinchliff@gmail.com>",
+    "Shea Newton <shnewto@gmail.com>",
+    "@CrockAgile",
+]
 
-version = "0.3.0"
+version = "0.4.0"
 license = "MIT"
 
-homepage = "https://github.com/shnewto/ashpaper"
-repository = "https://github.com/shnewto/ashpaper"
+homepage = "https://github.com/BenjaminHinchliff/ashpaper"
+repository = "https://github.com/BenjaminHinchliff/ashpaper.git"
 readme = "README.md"
 
 keywords = ["esolang", "esopo", "poetry", "interpreter"]
