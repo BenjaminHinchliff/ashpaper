@@ -14,6 +14,7 @@ license = "MIT"
 
 homepage = "https://github.com/BenjaminHinchliff/ashpaper"
 repository = "https://github.com/BenjaminHinchliff/ashpaper.git"
+documentation = "https://docs.rs/ashpaper-plus"
 readme = "README.md"
 
 keywords = ["esolang", "esopo", "poetry", "interpreter"]
