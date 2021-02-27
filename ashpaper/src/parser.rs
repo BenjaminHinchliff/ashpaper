@@ -40,7 +40,6 @@ pub struct Instruction {
 
 lazy_static! {
     // * it is assumed that these Regexes are valid
-    static ref NUM_RE: Regex = Regex::new(r"[0-9]").unwrap();
     static ref INT_CAP_RE: Regex = Regex::new(r"\b\S+[A-Z]\S+\b").unwrap();
     static ref CAP_RE: Regex = Regex::new(r"\b[A-Z][^A-Z]+\b").unwrap();
     static ref SIMILIE_RE: Regex = Regex::new(r"\b(like|as)\b").unwrap();
