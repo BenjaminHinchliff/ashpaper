@@ -36,10 +36,6 @@
 /// ```txt
 /// 24
 /// ```
-extern crate ashpaper;
-extern crate clap;
-extern crate log;
-
 use clap::{App, Arg};
 use std::fs;
 

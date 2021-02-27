@@ -1,5 +1,33 @@
-[workspace]
-members = [
-    "ashpaper/",
-    "ashpaper-bin/",
-]
+[package]
+name = "ashpaper"
+description = "Rust Inpterpreter for Esopo language AshPaper conceived by William Hicks"
+edition = "2018"
+
+authors = ["Shea Newton <shnewto@gmail.com>", "@CrockAgile"]
+
+version = "0.3.0"
+license = "MIT"
+
+homepage = "https://github.com/shnewto/ashpaper"
+repository = "https://github.com/shnewto/ashpaper"
+readme = "README.md"
+
+keywords = ["esolang", "esopo", "poetry", "interpreter"]
+
+[[bin]]
+name = "ashpaper"
+required-features = ["cli"]
+
+[features]
+cli = ["clap", "env_logger"]
+
+[dependencies]
+log = "0.4"
+regex = "1.4.3"
+lazy_static = "1.4.0"
+cmudict-fast = "0.8.0"
+clap = { version = "2.33.3", optional = true }
+env_logger = { version = "0.8.3", optional = true }
+
+[dev-dependencies]
+pretty_assertions = "0.6.1"
