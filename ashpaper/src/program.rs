@@ -129,7 +129,7 @@ pub fn execute(program: &str) -> String {
                 prev_syllables,
                 cur_syllables,
             } => {
-                if mem.get_active(Register::Register0) < mem.get_inactive(Register::Register1) {
+                if mem.get_active(reg) < mem.get_inactive(reg) {
                     mem.push_to_stack(prev_syllables as i64);
                 } else {
                     mem.push_to_stack(cur_syllables as i64);
@@ -160,6 +160,7 @@ pub fn execute(program: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn mem_get_inactive() {
@@ -184,6 +185,38 @@ mod tests {
         mem.store_syllables(reg, 2);
         mem.push(reg);
         assert_eq!(mem.stack, vec![1, 2]);
+    }
+
+    #[test]
+    fn alliteration() {
+        let alliteration_program = r#"
+poem or calculator or nothing
+    somebody once
+    fish fosh
+word.
+
+"#
+        .trim_start();
+
+        let result = execute(alliteration_program);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn rhyming() {
+        let rhyming_program = r#"
+somebody once told me 
+    he took a new elf 
+and stabbed it with a shelf
+pop,
+print.
+then he took blue
+and stabbed it with some you 
+pop,
+print.
+"#;
+        let result = execute(rhyming_program);
+        assert_eq!(result, "64");
     }
 
     #[test]

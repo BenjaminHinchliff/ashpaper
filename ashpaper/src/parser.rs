@@ -72,13 +72,20 @@ fn check_end_rhyme(last_line_option: Option<&str>, cur_line: &str) -> bool {
     if let Some(last_line) = last_line_option {
         // end-rhyme handling
         if let (Some(last_line_word), Some(last_word)) = (
-            last_line.split(' ').rev().next(),
-            cur_line.split(' ').rev().next(),
+            last_line.split(' ').rev().filter(|s| !s.is_empty()).next(),
+            cur_line.split(' ').rev().filter(|s| !s.is_empty()).next(),
         ) {
-            if let (Some(last_line_rule), Some(last_rule)) =
-                (CMUDICT.get(last_line_word), CMUDICT.get(last_word))
-            {
-                return cmudict::rhymes(&last_line_rule, &last_rule);
+            println!("{}, {}", last_line_word, last_word);
+            if let (Some(last_line_rule), Some(last_rule)) = (
+                CMUDICT.get(&last_line_word.to_lowercase()),
+                CMUDICT.get(&last_word.to_lowercase()),
+            ) {
+                println!(
+                    "{:?}\n{:?}",
+                    last_line_rule,
+                    last_rule
+                );
+                return cmudict::rhymes(last_line_rule, last_rule);
             }
         }
     }
@@ -123,7 +130,7 @@ pub fn count_syllables(input: &str) -> usize {
     input
         .split(' ')
         .filter(|s| !s.is_empty())
-        .map(|w| count_word_syllables(w))
+        .map(|w| count_word_syllables(&w.to_lowercase()))
         .sum()
 }
 
