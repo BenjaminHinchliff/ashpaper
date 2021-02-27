@@ -115,7 +115,7 @@ jobs:
         with:
           command: test
       - name: on poem
-        run: cargo run --features cli poems/lovely-poem.es
+        run: cargo run --features cli poems/lovely-poem.eso
       - name: run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         with:
