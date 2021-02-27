@@ -1,4 +1,4 @@
-use std::cmp;
+use std::{cmp, str::FromStr};
 
 use cmudict_fast::Cmudict;
 use cmudict_fast::{self as cmudict};
@@ -47,7 +47,7 @@ lazy_static! {
     static ref WS_START_RE: Regex = Regex::new(r"^\s").unwrap();
     static ref VOWEL_CLUSTER_RE: Regex = Regex::new(r"[^aeiouy]+").unwrap();
     // * no error handling
-    static ref CMUDICT: Cmudict = Cmudict::new("cmudict.dict").unwrap();
+    static ref CMUDICT: Cmudict = Cmudict::from_str(include_str!("../res/cmudict.dict")).unwrap();
 }
 
 /// test for alliteration by checking if multiple words in the input
@@ -351,5 +351,10 @@ print. it.
             line: source.to_string(),
         }];
         assert_eq!(tokens, target);
+    }
+
+    #[test]
+    fn store() {
+        let source = "";
     }
 }
