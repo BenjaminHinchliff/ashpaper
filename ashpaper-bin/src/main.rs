@@ -75,8 +75,5 @@ pub fn main() {
     let fname = matches.value_of("INPUT").unwrap();
     let contents = fs::read_to_string(fname).expect("Something went wrong reading input file!");
 
-    match ashpaper::program::execute(&contents) {
-        Ok(res) => print!("{}", res),
-        Err(e) => eprintln!("{}", e),
-    }
+    print!("{}", ashpaper::program::execute(&contents));
 }

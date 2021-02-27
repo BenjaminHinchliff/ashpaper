@@ -1,4 +1,3 @@
-use super::error::Error;
 use super::parser::Register;
 
 pub use super::parser::count_syllables;
@@ -83,7 +82,7 @@ impl Memory {
     }
 }
 
-pub fn execute(program: &str) -> Result<String, Error> {
+pub fn execute(program: &str) -> String {
     let instructions = parser::parse(program);
 
     let mut mem = Memory::new();
@@ -155,7 +154,7 @@ pub fn execute(program: &str) -> Result<String, Error> {
         instruction_pointer += 1;
     }
 
-    Ok(output)
+    output
 }
 
 #[cfg(test)]
@@ -210,11 +209,11 @@ how lovely can it be?
         let four_factorial = format!("lovely poem\n{}", factorial_program);
         println!("{}", four_factorial);
         let four_factorial_res = "24\n".to_string();
-        assert_eq!(execute(&four_factorial), Ok(four_factorial_res));
+        assert_eq!(execute(&four_factorial), four_factorial_res);
 
         let five_factorial = format!("lovely poem and\n{}", factorial_program);
         let five_factorial_res = "120\n".to_string();
-        assert_eq!(execute(&five_factorial), Ok(five_factorial_res));
+        assert_eq!(execute(&five_factorial), five_factorial_res);
     }
 
     #[test]

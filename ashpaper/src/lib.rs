@@ -51,10 +51,7 @@
 ///poem or a calculator or nothing
 ///how lovely can it be?
 ///                    ";
-///    match ashpaper::program::execute(&contents) {
-///        Ok(res) => print!("{}", res),
-///        Err(e) => eprintln!("{}", e),
-///    }
+///    print!("{}", ashpaper::program::execute(&contents));
 /// }
 /// ```
 ///
@@ -66,7 +63,5 @@
 /// ## Some caveats about compliance with the informal spec
 /// - It's entirely possible at this point that some of my implementation deviates from the spec in unintended ways. If you spot anything like that, please raise an issue :heart: :heart:
 /// - The alliteration and rhyming rules are still unimplemented.
-mod error;
 mod parser;
 pub mod program;
-pub use error::Error;
