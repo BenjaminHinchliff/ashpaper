@@ -6,7 +6,7 @@ use std::fs;
 pub fn main() {
     let matches = App::new("ashpaper")
         .version(clap::crate_version!())
-        .author(clap::crate_authors!())
+        .author(clap::crate_authors!(", "))
         .about("An AshPaper interpreter that executes 'poetry'")
         .arg(
             Arg::with_name("INPUT")
