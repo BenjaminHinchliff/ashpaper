@@ -1,6 +1,5 @@
 use super::parser::Register;
 
-pub use super::parser::count_syllables;
 use super::parser::{self, InsType, Instruction};
 
 #[derive(Debug, Clone)]
@@ -82,79 +81,89 @@ impl Memory {
     }
 }
 
-pub fn execute(program: &str) -> String {
-    let instructions = parser::parse(program);
+pub struct Program {
+    pub ast: Vec<Instruction>,
+}
 
-    let mut mem = Memory::new();
-    let mut output: String = String::new();
-
-    let mut instruction_pointer: usize = 0;
-
-    log::info!(
-        "{: <51} | {: ^4} | {: ^4} | {: ^7}",
-        "instruction",
-        "r0",
-        "r1",
-        "stack"
-    );
-    log::info!("{:-<51} | {:-^4} | {:-^4} | {:-^7}", "", "", "", "");
-
-    'outer: while let Some(ins) = instructions.get(instruction_pointer) {
-        let Instruction {
-            instruction,
-            register: reg,
-            ref line,
-        } = *ins;
-
-        match instruction {
-            InsType::ConditionalGoto(syllables) => {
-                if mem.get_active(reg) > syllables as i64 {
-                    instruction_pointer =
-                        (mem.get_inactive(reg).abs() as usize) % (instructions.len() as usize);
-                    continue 'outer;
-                }
-            }
-            InsType::Negate => mem.negate(reg),
-            InsType::Multiply => mem.multiply(reg),
-            InsType::Add => mem.add(reg),
-            InsType::PrintChar => {
-                let printable = (mem.get_active(reg).abs() % std::u8::MAX as i64) as u8;
-                output = format!("{}{}", output, printable as char);
-            }
-            InsType::PrintValue => output = format!("{}{}", output, mem.get_active(reg)),
-            InsType::Pop => mem.pop(reg),
-            InsType::Push => mem.push(reg),
-            InsType::Store(syllables) => mem.store_syllables(reg, syllables as i64),
-            InsType::ConditionalPush {
-                prev_syllables,
-                cur_syllables,
-            } => {
-                if mem.get_active(reg) < mem.get_inactive(reg) {
-                    mem.push_to_stack(prev_syllables as i64);
-                } else {
-                    mem.push_to_stack(cur_syllables as i64);
-                }
-            }
-            InsType::Goto => {
-                instruction_pointer =
-                    (mem.get_active(reg).abs() as usize) % (instructions.len() as usize);
-                continue 'outer;
-            }
-            InsType::Noop => (),
+impl Program {
+    pub fn create(source: &str) -> Program {
+        Program {
+            ast: parser::parse(source),
         }
-
-        log::info!(
-            "{: <51} | {: ^4} | {: ^4} | {:^?}",
-            line,
-            mem.register0,
-            mem.register1,
-            mem.stack
-        );
-
-        instruction_pointer += 1;
     }
 
-    output
+    pub fn execute(&self) -> String {
+        let mut mem = Memory::new();
+        let mut output: String = String::new();
+
+        let mut instruction_pointer: usize = 0;
+
+        log::info!(
+            "{: <51} | {: ^4} | {: ^4} | {: ^7}",
+            "instruction",
+            "r0",
+            "r1",
+            "stack"
+        );
+        log::info!("{:-<51} | {:-^4} | {:-^4} | {:-^7}", "", "", "", "");
+
+        'outer: while let Some(ins) = self.ast.get(instruction_pointer) {
+            let Instruction {
+                instruction,
+                register: reg,
+                ref line,
+            } = *ins;
+
+            match instruction {
+                InsType::ConditionalGoto(syllables) => {
+                    if mem.get_active(reg) > syllables as i64 {
+                        instruction_pointer =
+                            (mem.get_inactive(reg).abs() as usize) % (self.ast.len() as usize);
+                        continue 'outer;
+                    }
+                }
+                InsType::Negate => mem.negate(reg),
+                InsType::Multiply => mem.multiply(reg),
+                InsType::Add => mem.add(reg),
+                InsType::PrintChar => {
+                    let printable = (mem.get_active(reg).abs() % std::u8::MAX as i64) as u8;
+                    output = format!("{}{}", output, printable as char);
+                }
+                InsType::PrintValue => output = format!("{}{}", output, mem.get_active(reg)),
+                InsType::Pop => mem.pop(reg),
+                InsType::Push => mem.push(reg),
+                InsType::Store(syllables) => mem.store_syllables(reg, syllables as i64),
+                InsType::ConditionalPush {
+                    prev_syllables,
+                    cur_syllables,
+                } => {
+                    if mem.get_active(reg) < mem.get_inactive(reg) {
+                        mem.push_to_stack(prev_syllables as i64);
+                    } else {
+                        mem.push_to_stack(cur_syllables as i64);
+                    }
+                }
+                InsType::Goto => {
+                    instruction_pointer =
+                        (mem.get_active(reg).abs() as usize) % (self.ast.len() as usize);
+                    continue 'outer;
+                }
+                InsType::Noop => (),
+            }
+
+            log::info!(
+                "{: <51} | {: ^4} | {: ^4} | {:^?}",
+                line,
+                mem.register0,
+                mem.register1,
+                mem.stack
+            );
+
+            instruction_pointer += 1;
+        }
+
+        output
+    }
 }
 
 #[cfg(test)]
@@ -198,7 +207,8 @@ word.
 "#
         .trim_start();
 
-        let result = execute(alliteration_program);
+        let program = Program::create(alliteration_program);
+        let result = program.execute();
         assert_eq!(result, "");
     }
 
@@ -215,7 +225,9 @@ and stabbed it with some you
 pop,
 print.
 "#;
-        let result = execute(rhyming_program);
+
+        let program = Program::create(rhyming_program);
+        let result = program.execute();
         assert_eq!(result, "64");
     }
 
@@ -242,11 +254,13 @@ how lovely can it be?
         let four_factorial = format!("lovely poem\n{}", factorial_program);
         println!("{}", four_factorial);
         let four_factorial_res = "24\n".to_string();
-        assert_eq!(execute(&four_factorial), four_factorial_res);
+        let program = Program::create(&four_factorial);
+        assert_eq!(program.execute(), four_factorial_res);
 
         let five_factorial = format!("lovely poem and\n{}", factorial_program);
+        let program = Program::create(&five_factorial);
         let five_factorial_res = "120\n".to_string();
-        assert_eq!(execute(&five_factorial), five_factorial_res);
+        assert_eq!(program.execute(), five_factorial_res);
     }
 
     #[test]

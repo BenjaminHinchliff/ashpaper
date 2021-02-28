@@ -33,7 +33,7 @@
 //! ```rust
 //! use std::fs;
 //!
-//! use ashpaper_plus as ashpaper;
+//! use ashpaper_plus::program::Program;
 //!
 //! pub fn main() {
 //!    let contents = "
@@ -55,7 +55,9 @@
 //!poem or a calculator or nothing
 //!how lovely can it be?
 //!                    ";
-//!    print!("{}", ashpaper::program::execute(&contents));
+//!
+//!     let program = Program::create(&contents);
+//!     print!("{}", program.execute())
 //! }
 //! ```
 //!
@@ -74,4 +76,6 @@
 //! ## Some caveats about compliance with the informal spec
 //! - It's entirely possible at this point that some of the implementation deviates from the spec in unintended ways. If you spot anything like that, please raise an issue
 mod parser;
-pub mod program;
+mod program;
+pub use program::Program;
+pub use parser::count_syllables;

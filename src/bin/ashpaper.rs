@@ -1,4 +1,4 @@
-use ashpaper_plus as ashpaper;
+use ashpaper_plus::Program;
 use clap::{App, Arg};
 use std::fs;
 
@@ -25,7 +25,7 @@ pub fn main() {
         .get_matches();
 
     if let Some(syl_str) = matches.value_of("syllables") {
-        println!("{}", ashpaper::program::count_syllables(syl_str));
+        println!("{}", ashpaper_plus::count_syllables(syl_str));
         return;
     }
 
@@ -34,5 +34,6 @@ pub fn main() {
     let fname = matches.value_of("INPUT").unwrap();
     let contents = fs::read_to_string(fname).expect("Something went wrong reading input file!");
 
-    print!("{}", ashpaper::program::execute(&contents));
+    let program = Program::create(&contents);
+    print!("{}", program.execute());
 }
