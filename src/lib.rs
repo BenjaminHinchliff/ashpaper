@@ -33,7 +33,7 @@
 //! ```rust
 //! use std::fs;
 //!
-//! use ashpaper_plus::program::Program;
+//! use ashpaper_plus::Program;
 //!
 //! pub fn main() {
 //!    let contents = "

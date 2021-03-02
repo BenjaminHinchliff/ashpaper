@@ -131,9 +131,6 @@ pub fn parse(input: &str) -> Vec<Instruction> {
     let mut last_line_option: Option<&str> = None;
     let mut lines = Vec::new();
     for line in input.lines() {
-        // short-circuit on noop
-
-        // everything else
         let ins_type = if line.trim().is_empty() {
             InsType::Noop
         } else if check_end_rhyme(last_line_option, line) {
