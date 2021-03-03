@@ -3,6 +3,7 @@ use cranelift::{
         entity,
         ir::{JumpTable, StackSlot},
     },
+    frontend::Switch,
     prelude::*,
 };
 use cranelift_jit::{JITBuilder, JITModule};
@@ -68,9 +69,6 @@ impl JIT {
         builder.declare_var(top, int);
 
         let unreach_trap_block = builder.create_block();
-        builder.switch_to_block(unreach_trap_block);
-        builder.seal_block(unreach_trap_block);
-        builder.ins().trap(TrapCode::UnreachableCodeReached);
 
         let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
@@ -84,16 +82,20 @@ impl JIT {
         let top_ptr = builder.ins().stack_addr(int, stack, 0);
         builder.def_var(top, top_ptr);
 
-        let mut blocks = Vec::new();
-        let mut table_dat = JumpTableData::new();
-        // create blocks and add to jump table
-        for _ in &ast {
-            let block = builder.create_block();
-            table_dat.push_entry(block);
-            blocks.push(block);
-        }
+        let switch_fallback = builder.create_block();
 
-        let jump_table = builder.create_jump_table(table_dat);
+        let mut blocks = Vec::new();
+        let mut lines = Vec::new();
+        // create blocks and add to jump table
+        for (line, _) in ast
+            .iter()
+            .filter(|n| n.instruction != InsType::Noop)
+            .enumerate()
+        {
+            let block = builder.create_block();
+            blocks.push(block);
+            lines.push(line);
+        }
 
         // connect entry block to first block
         // TODO: prevent crash on empty program
@@ -110,21 +112,28 @@ impl JIT {
             };
             // get block ready for instructions
             builder.switch_to_block(block);
-            builder.seal_block(block);
 
             // actually translate an instructon to CLIR
             Self::translate_instruction(
                 node,
                 int,
-                jump_table,
+                switch_fallback,
                 unreach_trap_block,
                 next,
+                &blocks,
+                &lines,
                 &mut builder,
                 r0,
                 r1,
                 top,
             );
         }
+
+        builder.switch_to_block(unreach_trap_block);
+        builder.seal_block(unreach_trap_block);
+        builder.ins().trap(TrapCode::UnreachableCodeReached);
+
+        builder.seal_all_blocks();
 
         println!("{:?}", self.ctx.func);
 
@@ -150,12 +159,24 @@ impl JIT {
         Ok(())
     }
 
+    // I'm so mad that switches can't be created multiple times and
+    // I have to do this crap
+    fn make_switch(blocks: &[Block], lines: &[usize]) -> Switch {
+        let mut switch = Switch::new();
+        for (line, block) in lines.iter().zip(blocks) {
+            switch.set_entry(*line as u128, *block);
+        }
+        switch
+    }
+
     fn translate_instruction(
         ins: &Instruction,
         int: Type,
-        jt: JumpTable,
+        fallback: Block,
         trap_block: Block,
         next_block: Option<Block>,
+        all_blocks: &[Block],
+        line_numbers: &[usize],
         builder: &mut FunctionBuilder,
         r0: Variable,
         r1: Variable,
@@ -200,7 +221,8 @@ impl JIT {
             }
             InsType::Goto => {
                 let index_val = builder.use_var(active_reg);
-                builder.ins().br_table(index_val, trap_block, jt);
+                let switch = Self::make_switch(all_blocks, line_numbers);
+                switch.emit(builder, index_val, fallback);
             }
             InsType::Push => Self::translate_push(int, active_reg, builder, top),
             InsType::Pop => {
@@ -278,25 +300,7 @@ mod tests {
 
     #[test]
     fn jit() {
-        let source = r#"
-lovely poem
-
-  it is a calculator, like a
-      poem, is a poem, and finds
-        factori-
-          als
-  The input is the syllAbles
-in the title, count them, as one counts
-  (q) what other poem, programs can be writ
-  (a) anything a Turing
-    machine-machine-machine
-    would do
-re/cur
-    sion works too, in poems, programs, and this
-       a lovely.
-poem or calculator or nothing
-how lovely can it be?
-"#;
+        let source = include_str!("../poems/goto-test.eso"); 
         let tokens = parser::parse(source);
         println!("{:#?}", tokens);
         let mut jit = JIT::default();
