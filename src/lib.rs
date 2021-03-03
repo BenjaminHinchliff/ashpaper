@@ -77,5 +77,6 @@
 //! - It's entirely possible at this point that some of the implementation deviates from the spec in unintended ways. If you spot anything like that, please raise an issue
 mod parser;
 mod program;
+mod jit;
 pub use program::Program;
 pub use parser::count_syllables;
