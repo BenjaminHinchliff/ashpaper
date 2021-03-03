@@ -7,6 +7,7 @@ use cranelift::{
 };
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataContext, Linkage, Module};
+use itertools::{EitherOrBoth, Itertools};
 
 use crate::parser::{InsType, Instruction, Register};
 
@@ -39,7 +40,10 @@ impl JIT {
         // not yet patched in cargo release
         let ast: Vec<_> = ast
             .iter()
-            .filter(|n| n.instruction != InsType::Noop)
+            .filter(|n| match n.instruction {
+                InsType::Noop | InsType::PrintChar | InsType::PrintValue => false,
+                _ => true,
+            })
             .collect();
         let int = self.module.target_config().pointer_type();
 
@@ -91,26 +95,36 @@ impl JIT {
 
         let jump_table = builder.create_jump_table(table_dat);
 
-        for (node, block) in ast.iter().zip(blocks) {
-            builder.ins().jump(block, &[]);
+        // connect entry block to first block
+        // TODO: prevent crash on empty program
+        builder.ins().jump(*blocks.first().unwrap(), &[]);
+
+        for (node, block_and_next) in ast
+            .iter()
+            .zip(blocks.iter().zip_longest(blocks[1..].iter()))
+        {
+            let (block, next) = match block_and_next {
+                EitherOrBoth::Left(l) => (*l, None),
+                EitherOrBoth::Both(l, r) => (*l, Some(*r)),
+                EitherOrBoth::Right(_) => unreachable!(),
+            };
+            // get block ready for instructions
             builder.switch_to_block(block);
             builder.seal_block(block);
 
+            // actually translate an instructon to CLIR
             Self::translate_instruction(
                 node,
                 int,
                 jump_table,
                 unreach_trap_block,
+                next,
                 &mut builder,
                 r0,
                 r1,
-                stack,
                 top,
             );
         }
-
-        let ret_val = builder.use_var(r0);
-        builder.ins().return_(&[ret_val]);
 
         println!("{:?}", self.ctx.func);
 
@@ -141,10 +155,10 @@ impl JIT {
         int: Type,
         jt: JumpTable,
         trap_block: Block,
+        next_block: Option<Block>,
         builder: &mut FunctionBuilder,
         r0: Variable,
         r1: Variable,
-        stack: StackSlot,
         top: Variable,
     ) {
         let Instruction {
@@ -188,8 +202,71 @@ impl JIT {
                 let index_val = builder.use_var(active_reg);
                 builder.ins().br_table(index_val, trap_block, jt);
             }
-            InsType::Push => {}
+            InsType::Push => Self::translate_push(int, active_reg, builder, top),
+            InsType::Pop => {
+                let top_val = builder.use_var(top);
+                let size = builder.ins().iconst(int, int.bytes() as i64);
+                let dec = builder.ins().isub(top_val, size);
+                builder.def_var(top, dec);
+                let top_val = builder.use_var(top);
+                let loaded_val = builder.ins().load(int, MemFlags::new(), top_val, 0);
+                builder.def_var(active_reg, loaded_val);
+            }
+            InsType::ConditionalPush {
+                prev_syllables,
+                cur_syllables,
+            } => {
+                let active_val = builder.use_var(active_reg);
+                let inactive_val = builder.use_var(inactive_reg);
+                let cond_val = builder
+                    .ins()
+                    .icmp(IntCC::SignedLessThan, active_val, inactive_val);
+                let then_block = builder.create_block();
+                let else_block = builder.create_block();
+                let merge_block = builder.create_block();
+                builder.ins().brz(cond_val, else_block, &[]);
+                builder.ins().jump(then_block, &[]);
+
+                builder.switch_to_block(else_block);
+                builder.seal_block(else_block);
+                let cur_val = builder.ins().iconst(int, *cur_syllables as i64);
+                Self::translate_push_val(int, cur_val, builder, top);
+                builder.ins().jump(merge_block, &[]);
+
+                builder.switch_to_block(then_block);
+                builder.seal_block(then_block);
+                let prev_val = builder.ins().iconst(int, *prev_syllables as i64);
+                Self::translate_push_val(int, prev_val, builder, top);
+                builder.ins().jump(merge_block, &[]);
+            }
             _ => (),
+        }
+        Self::connect_end(builder, next_block, r0);
+    }
+
+    fn translate_push_val(int: Type, value: Value, builder: &mut FunctionBuilder, top: Variable) {
+        let top_val = builder.use_var(top);
+        builder.ins().store(MemFlags::new(), value, top_val, 0);
+        let size = builder.ins().iconst(int, int.bytes() as i64);
+        let inc = builder.ins().iadd(top_val, size);
+        builder.def_var(top, inc);
+    }
+
+    fn translate_push(int: Type, reg: Variable, builder: &mut FunctionBuilder, top: Variable) {
+        let store_val = builder.use_var(reg);
+        let top_val = builder.use_var(top);
+        builder.ins().store(MemFlags::new(), store_val, top_val, 0);
+        let size = builder.ins().iconst(int, int.bytes() as i64);
+        let inc = builder.ins().iadd(top_val, size);
+        builder.def_var(top, inc);
+    }
+
+    fn connect_end(builder: &mut FunctionBuilder, next_block: Option<Block>, r0: Variable) {
+        if let Some(next) = next_block {
+            builder.ins().jump(next, &[]);
+        } else {
+            let ret_val = builder.use_var(r0);
+            builder.ins().return_(&[ret_val]);
         }
     }
 }

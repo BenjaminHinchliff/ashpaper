@@ -36,6 +36,7 @@ env_logger = { version = "0.8.3", optional = true }
 cranelift = "0.70.0"
 cranelift-module = "0.70.0"
 cranelift-jit = "0.70.0"
+itertools = "0.10.0"
 
 [dev-dependencies]
 pretty_assertions = "0.6.1"
