@@ -260,14 +260,15 @@ impl JIT {
                     .ins()
                     .icmp(IntCC::SignedGreaterThan, reg_val, syl_val);
                 let then_block = builder.create_block();
+                let merge_block = builder.create_block();
                 builder.ins().brnz(cond_val, then_block, &[]);
-                Self::connect_end(builder, next_block);
+                builder.ins().jump(merge_block, &[]);
 
                 builder.switch_to_block(then_block);
                 let index_val = builder.use_var(inactive_reg);
                 builder.ins().br_table(index_val, trap_block, jump_table);
 
-                connected = true;
+                builder.switch_to_block(merge_block);
             }
             InsType::Push => Self::translate_push(int, active_reg, builder, top),
             InsType::Pop => {
@@ -290,6 +291,7 @@ impl JIT {
                     .icmp(IntCC::SignedLessThan, active_val, inactive_val);
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
+                let merge_block = builder.create_block();
                 builder.ins().brz(cond_val, else_block, &[]);
                 builder.ins().jump(then_block, &[]);
 
@@ -297,13 +299,13 @@ impl JIT {
                 builder.seal_block(else_block);
                 let cur_val = builder.ins().iconst(int, *cur_syllables as i64);
                 Self::translate_push_val(int, cur_val, builder, top);
-                Self::connect_end(builder, next_block);
+                builder.ins().jump(merge_block, &[]);
 
                 builder.switch_to_block(then_block);
                 builder.seal_block(then_block);
                 let prev_val = builder.ins().iconst(int, *prev_syllables as i64);
                 Self::translate_push_val(int, prev_val, builder, top);
-                Self::connect_end(builder, next_block);
+                builder.ins().jump(merge_block, &[]);
             }
             InsType::PrintValue => {
                 let reg_val = builder.use_var(active_reg);
@@ -367,11 +369,38 @@ mod tests {
 
     #[test]
     fn factorial() {
-        let source = include_str!("../poems/lovely-poem.eso");
+        let source = include_str!("../poems/original-factorial.eso");
         let tokens = parser::parse(source);
         println!("{:#?}", tokens);
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
         panic!()
+    }
+
+    #[test]
+    fn stack() {
+        let source = include_str!("../poems/stack-test.eso");
+        let tokens = parser::parse(source);
+        println!("{:#?}", tokens);
+        let mut jit = JIT::default();
+        jit.compile(&tokens).unwrap();
+    }
+
+    #[test]
+    fn cond_goto() {
+        let source = include_str!("../poems/cond-goto-test.eso");
+        let tokens = parser::parse(source);
+        println!("{:#?}", tokens);
+        let mut jit = JIT::default();
+        jit.compile(&tokens).unwrap();
+    }
+
+    #[test]
+    fn math() {
+        let source = include_str!("../poems/math-test.eso");
+        let tokens = parser::parse(source);
+        println!("{:#?}", tokens);
+        let mut jit = JIT::default();
+        jit.compile(&tokens).unwrap();
     }
 }
