@@ -1,18 +1,30 @@
+use std::mem;
+
 use cranelift::{
     codegen::{
         entity,
-        ir::{JumpTable, StackSlot},
+        ir::{FuncRef, JumpTable, StackSlot},
     },
     frontend::Switch,
     prelude::*,
 };
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataContext, Linkage, Module};
+use cranelift_module::{DataContext, FuncId, Linkage, Module};
 use itertools::{EitherOrBoth, Itertools};
 
 use crate::parser::{InsType, Instruction, Register};
 
 const STACK_SIZE: u32 = 128;
+
+// TODO: prevent undefined behavior on 32 bit systems
+fn put_value(val: i64) {
+    print!("{}", val);
+}
+
+fn put_char(c: i64) {
+    let c = (c.abs() % std::u8::MAX as i64) as u8;
+    print!("{}", c as char);
+}
 
 pub struct JIT {
     builder_context: FunctionBuilderContext,
@@ -23,7 +35,11 @@ pub struct JIT {
 
 impl Default for JIT {
     fn default() -> Self {
-        let builder = JITBuilder::new(cranelift_module::default_libcall_names());
+        let mut builder = JITBuilder::new(cranelift_module::default_libcall_names());
+        let put_val_addr: *const u8 = unsafe { mem::transmute(put_value as fn(_)) };
+        builder.symbol("put_value", put_val_addr);
+        let put_char_addr: *const u8 = unsafe { mem::transmute(put_char as fn(_)) };
+        builder.symbol("put_char", put_char_addr);
         let module = JITModule::new(builder);
         Self {
             builder_context: FunctionBuilderContext::new(),
@@ -39,20 +55,23 @@ impl JIT {
         // needed due to unused block jump table problems
         // (https://github.com/bytecodealliance/wasmtime/issues/2670)
         // not yet patched in cargo release
-        let ast: Vec<_> = ast
-            .iter()
-            .filter(|n| match n.instruction {
-                InsType::Noop | InsType::PrintChar | InsType::PrintValue => false,
-                _ => true,
-            })
-            .collect();
         let int = self.module.target_config().pointer_type();
 
         println!("{:?}", int);
 
-        self.ctx.func.signature.returns.push(AbiParam::new(int));
+        // create imported funcs before builder
+        let put_val_id = self.make_put_value();
+        let put_char_id = self.make_put_char();
 
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+
+        // put value func
+        let put_val_func = self
+            .module
+            .declare_func_in_func(put_val_id, &mut builder.func);
+        let put_char_func = self
+            .module
+            .declare_func_in_func(put_char_id, &mut builder.func);
 
         // program stack
         let stack = builder.create_stack_slot(StackSlotData::new(
@@ -82,20 +101,17 @@ impl JIT {
         let top_ptr = builder.ins().stack_addr(int, stack, 0);
         builder.def_var(top, top_ptr);
 
-        let switch_fallback = builder.create_block();
+        let mut jump_table_data = JumpTableData::new();
 
         let mut blocks = Vec::new();
-        let mut lines = Vec::new();
         // create blocks and add to jump table
-        for (line, _) in ast
-            .iter()
-            .filter(|n| n.instruction != InsType::Noop)
-            .enumerate()
-        {
+        for _ in ast {
             let block = builder.create_block();
+            jump_table_data.push_entry(block);
             blocks.push(block);
-            lines.push(line);
         }
+
+        let jump_table = builder.create_jump_table(jump_table_data);
 
         // connect entry block to first block
         // TODO: prevent crash on empty program
@@ -113,16 +129,18 @@ impl JIT {
             // get block ready for instructions
             builder.switch_to_block(block);
 
+            println!("{:?}: {:?} {:?}", node, block, next);
+
             // actually translate an instructon to CLIR
             Self::translate_instruction(
                 node,
                 int,
-                switch_fallback,
+                jump_table,
                 unreach_trap_block,
                 next,
-                &blocks,
-                &lines,
                 &mut builder,
+                put_val_func,
+                put_char_func,
                 r0,
                 r1,
                 top,
@@ -152,32 +170,47 @@ impl JIT {
 
         let ptr = self.module.get_finalized_function(id);
 
-        let out_fn = unsafe { std::mem::transmute::<_, fn() -> i64>(ptr) };
+        let out_fn = unsafe { std::mem::transmute::<_, fn() -> ()>(ptr) };
 
-        println!("{:?}", out_fn());
+        out_fn();
 
         Ok(())
     }
 
-    // I'm so mad that switches can't be created multiple times and
-    // I have to do this crap
-    fn make_switch(blocks: &[Block], lines: &[usize]) -> Switch {
-        let mut switch = Switch::new();
-        for (line, block) in lines.iter().zip(blocks) {
-            switch.set_entry(*line as u128, *block);
-        }
-        switch
+    pub fn make_put_value(&mut self) -> FuncId {
+        let int = self.module.target_config().pointer_type();
+
+        self.ctx.func.signature.params.push(AbiParam::new(int));
+
+        let put_value = self
+            .module
+            .declare_function("put_value", Linkage::Import, &self.ctx.func.signature)
+            .unwrap();
+        self.module.clear_context(&mut self.ctx);
+        put_value
+    }
+
+    pub fn make_put_char(&mut self) -> FuncId {
+        let int = self.module.target_config().pointer_type();
+        self.ctx.func.signature.params.push(AbiParam::new(int));
+
+        let put_char = self
+            .module
+            .declare_function("put_char", Linkage::Import, &self.ctx.func.signature)
+            .unwrap();
+        self.module.clear_context(&mut self.ctx);
+        put_char
     }
 
     fn translate_instruction(
         ins: &Instruction,
         int: Type,
-        fallback: Block,
+        jump_table: JumpTable,
         trap_block: Block,
         next_block: Option<Block>,
-        all_blocks: &[Block],
-        line_numbers: &[usize],
         builder: &mut FunctionBuilder,
+        put_val_func: FuncRef,
+        put_char_func: FuncRef,
         r0: Variable,
         r1: Variable,
         top: Variable,
@@ -195,12 +228,11 @@ impl JIT {
             Register::Register0 => r1,
             Register::Register1 => r0,
         };
+        let mut connected = false;
         match kind {
             InsType::Store(syl) => {
                 let store_val = builder.ins().iconst(int, *syl as i64);
-                let reg_val = builder.use_var(active_reg);
-                let add = builder.ins().iadd(reg_val, store_val);
-                builder.def_var(active_reg, add);
+                builder.def_var(active_reg, store_val);
             }
             InsType::Negate => {
                 let reg_val = builder.use_var(active_reg);
@@ -221,8 +253,8 @@ impl JIT {
             }
             InsType::Goto => {
                 let index_val = builder.use_var(active_reg);
-                let switch = Self::make_switch(all_blocks, line_numbers);
-                switch.emit(builder, index_val, fallback);
+                builder.ins().br_table(index_val, trap_block, jump_table);
+                connected = true;
             }
             InsType::Push => Self::translate_push(int, active_reg, builder, top),
             InsType::Pop => {
@@ -245,7 +277,6 @@ impl JIT {
                     .icmp(IntCC::SignedLessThan, active_val, inactive_val);
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
-                let merge_block = builder.create_block();
                 builder.ins().brz(cond_val, else_block, &[]);
                 builder.ins().jump(then_block, &[]);
 
@@ -253,17 +284,29 @@ impl JIT {
                 builder.seal_block(else_block);
                 let cur_val = builder.ins().iconst(int, *cur_syllables as i64);
                 Self::translate_push_val(int, cur_val, builder, top);
-                builder.ins().jump(merge_block, &[]);
+                Self::connect_end(builder, next_block);
 
                 builder.switch_to_block(then_block);
                 builder.seal_block(then_block);
                 let prev_val = builder.ins().iconst(int, *prev_syllables as i64);
                 Self::translate_push_val(int, prev_val, builder, top);
-                builder.ins().jump(merge_block, &[]);
+                Self::connect_end(builder, next_block);
             }
-            _ => (),
+            InsType::PrintValue => {
+                let reg_val = builder.use_var(active_reg);
+                builder.ins().call(put_val_func, &[reg_val]);
+            }
+            InsType::PrintChar => {
+                let reg_val = builder.use_var(active_reg);
+                builder.ins().call(put_char_func, &[reg_val]);
+            }
+            _ => {
+                builder.ins().nop();
+            }
         }
-        Self::connect_end(builder, next_block, r0);
+        if !connected {
+            Self::connect_end(builder, next_block);
+        }
     }
 
     fn translate_push_val(int: Type, value: Value, builder: &mut FunctionBuilder, top: Variable) {
@@ -283,12 +326,11 @@ impl JIT {
         builder.def_var(top, inc);
     }
 
-    fn connect_end(builder: &mut FunctionBuilder, next_block: Option<Block>, r0: Variable) {
+    fn connect_end(builder: &mut FunctionBuilder, next_block: Option<Block>) {
         if let Some(next) = next_block {
             builder.ins().jump(next, &[]);
         } else {
-            let ret_val = builder.use_var(r0);
-            builder.ins().return_(&[ret_val]);
+            builder.ins().return_(&[]);
         }
     }
 }
@@ -299,8 +341,17 @@ mod tests {
     use crate::parser;
 
     #[test]
-    fn jit() {
-        let source = include_str!("../poems/goto-test.eso"); 
+    fn basic_goto() {
+        let source = include_str!("../poems/goto-test.eso");
+        let tokens = parser::parse(source);
+        println!("{:#?}", tokens);
+        let mut jit = JIT::default();
+        jit.compile(&tokens).unwrap();
+    }
+
+    #[test]
+    fn factorial() {
+        let source = include_str!("../poems/lovely-poem.eso");
         let tokens = parser::parse(source);
         println!("{:#?}", tokens);
         let mut jit = JIT::default();
