@@ -52,9 +52,6 @@ impl Default for JIT {
 
 impl JIT {
     pub fn compile(&mut self, ast: &[Instruction]) -> Result<(), String> {
-        // needed due to unused block jump table problems
-        // (https://github.com/bytecodealliance/wasmtime/issues/2670)
-        // not yet patched in cargo release
         let int = self.module.target_config().pointer_type();
 
         println!("{:?}", int);
@@ -256,6 +253,22 @@ impl JIT {
                 builder.ins().br_table(index_val, trap_block, jump_table);
                 connected = true;
             }
+            InsType::ConditionalGoto(syl) => {
+                let syl_val = builder.ins().iconst(int, *syl as i64);
+                let reg_val = builder.use_var(active_reg);
+                let cond_val = builder
+                    .ins()
+                    .icmp(IntCC::SignedGreaterThan, reg_val, syl_val);
+                let then_block = builder.create_block();
+                builder.ins().brnz(cond_val, then_block, &[]);
+                Self::connect_end(builder, next_block);
+
+                builder.switch_to_block(then_block);
+                let index_val = builder.use_var(inactive_reg);
+                builder.ins().br_table(index_val, trap_block, jump_table);
+
+                connected = true;
+            }
             InsType::Push => Self::translate_push(int, active_reg, builder, top),
             InsType::Pop => {
                 let top_val = builder.use_var(top);
@@ -300,7 +313,10 @@ impl JIT {
                 let reg_val = builder.use_var(active_reg);
                 builder.ins().call(put_char_func, &[reg_val]);
             }
-            _ => {
+            InsType::Noop => {
+                // here so blocks don't get agressively removed for
+                // unused code causing invalid refs
+                // (https://github.com/bytecodealliance/wasmtime/issues/2670)
                 builder.ins().nop();
             }
         }
