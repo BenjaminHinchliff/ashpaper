@@ -360,20 +360,24 @@ impl JIT {
     }
 
     fn translate_push_val(int: Type, value: Value, builder: &mut FunctionBuilder, stack: &Stack) {
+        let merge_block = builder.create_block();
+
         let ptr_val = builder.use_var(stack.ptr);
         builder.ins().store(MemFlags::new(), value, ptr_val, 0);
         let size = builder.ins().iconst(int, int.bytes() as i64);
+        let end_val = builder.use_var(stack.end);
+        let end_comp = builder.ins().icmp(IntCC::SignedGreaterThan, ptr_val, end_val);
+        builder.ins().brnz(end_comp, stack.overflow_trap, &[]);
+        builder.ins().jump(merge_block, &[]);
+
+        builder.switch_to_block(merge_block);
         let inc = builder.ins().iadd(ptr_val, size);
         builder.def_var(stack.ptr, inc);
     }
 
     fn translate_push(int: Type, reg: Variable, builder: &mut FunctionBuilder, stack: &Stack) {
         let store_val = builder.use_var(reg);
-        let ptr_val = builder.use_var(stack.ptr);
-        builder.ins().store(MemFlags::new(), store_val, ptr_val, 0);
-        let size = builder.ins().iconst(int, int.bytes() as i64);
-        let inc = builder.ins().iadd(ptr_val, size);
-        builder.def_var(stack.ptr, inc);
+        Self::translate_push_val(int, store_val, builder, stack);
     }
 
     fn connect_end(builder: &mut FunctionBuilder, next_block: Option<Block>) {
