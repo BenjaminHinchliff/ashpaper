@@ -44,10 +44,8 @@ impl Default for JIT {
 }
 
 impl JIT {
-    pub fn compile(&mut self, ast: &[Instruction]) -> Result<(), String> {
+    pub fn compile(&mut self, ast: &[Instruction]) -> Result<fn(), String> {
         let int = self.module.target_config().pointer_type();
-
-        println!("{:?}", int);
 
         // create imported funcs before builder
         let put_val_id = self.make_put_value();
@@ -108,38 +106,37 @@ impl JIT {
         let jump_table = builder.create_jump_table(jump_table_data);
 
         // connect entry block to first block
-        // TODO: prevent crash on empty program
-        builder.ins().jump(*blocks.first().unwrap(), &[]);
+        Self::connect_end(&mut builder, blocks.first().copied());
 
-        for (node, block_and_next) in ast
-            .iter()
-            .zip(blocks.iter().zip_longest(blocks[1..].iter()))
-        {
-            let (block, next) = match block_and_next {
-                EitherOrBoth::Left(l) => (*l, None),
-                EitherOrBoth::Both(l, r) => (*l, Some(*r)),
-                EitherOrBoth::Right(_) => unreachable!(),
-            };
-            // get block ready for instructions
-            builder.switch_to_block(block);
+        if !blocks.is_empty() {
+            for (node, block_and_next) in ast
+                .iter()
+                .zip(blocks.iter().zip_longest(blocks[1..].iter()))
+            {
+                let (block, next) = match block_and_next {
+                    EitherOrBoth::Left(l) => (*l, None),
+                    EitherOrBoth::Both(l, r) => (*l, Some(*r)),
+                    EitherOrBoth::Right(_) => unreachable!(),
+                };
+                // get block ready for instructions
+                builder.switch_to_block(block);
 
-            println!("{:?}: {:?} {:?}", node, block, next);
-
-            // actually translate an instructon to CLIR
-            Self::translate_instruction(
-                node,
-                int,
-                jump_table,
-                unreach_trap_block,
-                next,
-                &mut builder,
-                put_val_func,
-                put_char_func,
-                r0,
-                r1,
-                stack_start,
-                top,
-            );
+                // actually translate an instructon to CLIR
+                Self::translate_instruction(
+                    node,
+                    int,
+                    jump_table,
+                    unreach_trap_block,
+                    next,
+                    &mut builder,
+                    put_val_func,
+                    put_char_func,
+                    r0,
+                    r1,
+                    stack_start,
+                    top,
+                );
+            }
         }
 
         builder.switch_to_block(unreach_trap_block);
@@ -147,8 +144,6 @@ impl JIT {
         builder.ins().trap(TrapCode::UnreachableCodeReached);
 
         builder.seal_all_blocks();
-
-        println!("{:?}", self.ctx.func);
 
         let id = self
             .module
@@ -165,11 +160,7 @@ impl JIT {
 
         let ptr = self.module.get_finalized_function(id);
 
-        let out_fn = unsafe { std::mem::transmute::<_, fn() -> ()>(ptr) };
-
-        out_fn();
-
-        Ok(())
+        Ok(unsafe { std::mem::transmute::<_, fn()>(ptr) })
     }
 
     pub fn make_put_value(&mut self) -> FuncId {
@@ -368,7 +359,6 @@ mod tests {
     fn basic_goto() {
         let source = include_str!("../poems/goto-test.eso");
         let tokens = parser::parse(source);
-        println!("{:#?}", tokens);
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
     }
@@ -377,7 +367,6 @@ mod tests {
     fn factorial() {
         let source = include_str!("../poems/original-factorial.eso");
         let tokens = parser::parse(source);
-        println!("{:#?}", tokens);
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
     }
@@ -386,7 +375,6 @@ mod tests {
     fn stack() {
         let source = include_str!("../poems/stack-test.eso");
         let tokens = parser::parse(source);
-        println!("{:#?}", tokens);
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
     }
@@ -395,7 +383,6 @@ mod tests {
     fn cond_goto() {
         let source = include_str!("../poems/cond-goto-test.eso");
         let tokens = parser::parse(source);
-        println!("{:#?}", tokens);
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
     }
@@ -404,7 +391,13 @@ mod tests {
     fn math() {
         let source = include_str!("../poems/math-test.eso");
         let tokens = parser::parse(source);
-        println!("{:#?}", tokens);
+        let mut jit = JIT::default();
+        jit.compile(&tokens).unwrap();
+    }
+
+    #[test]
+    fn empty() {
+        let tokens = parser::parse("");
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
     }
