@@ -13,6 +13,7 @@ use cranelift_module::{DataContext, FuncId, Linkage, Module};
 use itertools::{EitherOrBoth, Itertools};
 
 use super::{
+    errors::Result,
     parser::{InsType, Instruction, Register},
     rt::{put_char, put_value},
 };
@@ -44,12 +45,12 @@ impl Default for JIT {
 }
 
 impl JIT {
-    pub fn compile(&mut self, ast: &[Instruction]) -> Result<fn(), String> {
+    pub fn compile(&mut self, ast: &[Instruction]) -> Result<fn()> {
         let int = self.module.target_config().pointer_type();
 
         // create imported funcs before builder
-        let put_val_id = self.make_put_value();
-        let put_char_id = self.make_put_char();
+        let put_val_id = self.make_put_value()?;
+        let put_char_id = self.make_put_char()?;
 
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
@@ -147,12 +148,10 @@ impl JIT {
 
         let id = self
             .module
-            .declare_function("main", Linkage::Export, &self.ctx.func.signature)
-            .unwrap();
+            .declare_function("main", Linkage::Export, &self.ctx.func.signature)?;
 
         self.module
-            .define_function(id, &mut self.ctx, &mut codegen::binemit::NullTrapSink {})
-            .unwrap();
+            .define_function(id, &mut self.ctx, &mut codegen::binemit::NullTrapSink {})?;
 
         self.module.clear_context(&mut self.ctx);
 
@@ -163,29 +162,27 @@ impl JIT {
         Ok(unsafe { std::mem::transmute::<_, fn()>(ptr) })
     }
 
-    pub fn make_put_value(&mut self) -> FuncId {
+    pub fn make_put_value(&mut self) -> Result<FuncId> {
         let int = self.module.target_config().pointer_type();
 
         self.ctx.func.signature.params.push(AbiParam::new(int));
 
-        let put_value = self
-            .module
-            .declare_function("put_value", Linkage::Import, &self.ctx.func.signature)
-            .unwrap();
+        let put_value =
+            self.module
+                .declare_function("put_value", Linkage::Import, &self.ctx.func.signature)?;
         self.module.clear_context(&mut self.ctx);
-        put_value
+        Ok(put_value)
     }
 
-    pub fn make_put_char(&mut self) -> FuncId {
+    pub fn make_put_char(&mut self) -> Result<FuncId> {
         let int = self.module.target_config().pointer_type();
         self.ctx.func.signature.params.push(AbiParam::new(int));
 
-        let put_char = self
-            .module
-            .declare_function("put_char", Linkage::Import, &self.ctx.func.signature)
-            .unwrap();
+        let put_char =
+            self.module
+                .declare_function("put_char", Linkage::Import, &self.ctx.func.signature)?;
         self.module.clear_context(&mut self.ctx);
-        put_char
+        Ok(put_char)
     }
 
     fn translate_instruction(
