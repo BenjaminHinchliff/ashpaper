@@ -79,10 +79,12 @@ impl JIT {
         let r0 = Variable::new(0);
         let r1 = Variable::new(1);
         let top = Variable::new(2);
+        let stack_start = Variable::new(3);
         builder.declare_var(r0, int);
         builder.declare_var(r1, int);
         // top of stack
         builder.declare_var(top, int);
+        builder.declare_var(stack_start, int);
 
         let unreach_trap_block = builder.create_block();
 
@@ -97,6 +99,8 @@ impl JIT {
         builder.def_var(r1, zero2);
         let top_ptr = builder.ins().stack_addr(int, stack, 0);
         builder.def_var(top, top_ptr);
+        let stack_start_ptr = builder.use_var(top);
+        builder.def_var(stack_start, stack_start_ptr);
 
         let mut jump_table_data = JumpTableData::new();
 
@@ -140,6 +144,7 @@ impl JIT {
                 put_char_func,
                 r0,
                 r1,
+                stack_start,
                 top,
             );
         }
@@ -210,6 +215,7 @@ impl JIT {
         put_char_func: FuncRef,
         r0: Variable,
         r1: Variable,
+        stack_start: Variable,
         top: Variable,
     ) {
         let Instruction {
@@ -273,12 +279,26 @@ impl JIT {
             InsType::Push => Self::translate_push(int, active_reg, builder, top),
             InsType::Pop => {
                 let top_val = builder.use_var(top);
-                let size = builder.ins().iconst(int, int.bytes() as i64);
-                let dec = builder.ins().isub(top_val, size);
+                let stack_start_val = builder.use_var(stack_start);
+                let comp =
+                    builder
+                        .ins()
+                        .icmp(IntCC::SignedLessThanOrEqual, top_val, stack_start_val);
+                let then_block = builder.create_block();
+                let merge_block = builder.create_block();
+                builder.ins().brnz(comp, merge_block, &[]);
+                builder.ins().jump(then_block, &[]);
+
+                builder.switch_to_block(then_block);
+                let ptr_size = builder.ins().iconst(int, int.bytes() as i64);
+                let dec = builder.ins().isub(top_val, ptr_size);
                 builder.def_var(top, dec);
                 let top_val = builder.use_var(top);
                 let loaded_val = builder.ins().load(int, MemFlags::new(), top_val, 0);
                 builder.def_var(active_reg, loaded_val);
+                builder.ins().jump(merge_block, &[]);
+                
+                builder.switch_to_block(merge_block);
             }
             InsType::ConditionalPush {
                 prev_syllables,
@@ -296,13 +316,11 @@ impl JIT {
                 builder.ins().jump(then_block, &[]);
 
                 builder.switch_to_block(else_block);
-                builder.seal_block(else_block);
                 let cur_val = builder.ins().iconst(int, *cur_syllables as i64);
                 Self::translate_push_val(int, cur_val, builder, top);
                 builder.ins().jump(merge_block, &[]);
 
                 builder.switch_to_block(then_block);
-                builder.seal_block(then_block);
                 let prev_val = builder.ins().iconst(int, *prev_syllables as i64);
                 Self::translate_push_val(int, prev_val, builder, top);
                 builder.ins().jump(merge_block, &[]);
