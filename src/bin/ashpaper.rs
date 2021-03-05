@@ -31,7 +31,7 @@ fn execute_program(matches: &ArgMatches, program: &Program) {
 }
 
 #[cfg(not(feature = "jit"))]
-fn execute_program(matches: &ArgMatches, program: &Program) {
+fn execute_program(_matches: &ArgMatches, program: &Program) {
     println!("executing");
     print!("{}", program.execute())
 }
