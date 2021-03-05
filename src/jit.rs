@@ -12,19 +12,12 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataContext, FuncId, Linkage, Module};
 use itertools::{EitherOrBoth, Itertools};
 
-use crate::parser::{InsType, Instruction, Register};
+use super::{
+    parser::{InsType, Instruction, Register},
+    rt::{put_char, put_value},
+};
 
 const STACK_SIZE: u32 = 128;
-
-// TODO: prevent undefined behavior on 32 bit systems
-fn put_value(val: i64) {
-    print!("{}", val);
-}
-
-fn put_char(c: i64) {
-    let c = (c.abs() % std::u8::MAX as i64) as u8;
-    print!("{}", c as char);
-}
 
 pub struct JIT {
     builder_context: FunctionBuilderContext,
@@ -297,7 +290,7 @@ impl JIT {
                 let loaded_val = builder.ins().load(int, MemFlags::new(), top_val, 0);
                 builder.def_var(active_reg, loaded_val);
                 builder.ins().jump(merge_block, &[]);
-                
+
                 builder.switch_to_block(merge_block);
             }
             InsType::ConditionalPush {
@@ -333,12 +326,7 @@ impl JIT {
                 let reg_val = builder.use_var(active_reg);
                 builder.ins().call(put_char_func, &[reg_val]);
             }
-            InsType::Noop => {
-                // here so blocks don't get agressively removed for
-                // unused code causing invalid refs
-                // (https://github.com/bytecodealliance/wasmtime/issues/2670)
-                builder.ins().nop();
-            }
+            InsType::Noop => (),
         }
         if !connected {
             Self::connect_end(builder, next_block);
@@ -392,7 +380,6 @@ mod tests {
         println!("{:#?}", tokens);
         let mut jit = JIT::default();
         jit.compile(&tokens).unwrap();
-        panic!()
     }
 
     #[test]

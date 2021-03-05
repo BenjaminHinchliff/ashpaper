@@ -78,5 +78,6 @@
 mod parser;
 mod program;
 mod jit;
+mod rt;
 pub use program::Program;
 pub use parser::count_syllables;
