@@ -1,9 +1,6 @@
-use crate::jit::JIT;
-
-use super::parser::{
-    self, Register, InsType, Instruction,
-};
-use super::errors::Result;
+use super::parser::{self, InsType, Instruction, Register};
+#[cfg(feature = "jit")]
+use super::{errors::jit::JitResult, jit::JIT};
 
 #[derive(Debug, Clone)]
 struct Memory {
@@ -93,7 +90,7 @@ impl Program {
         Program {
             ast: parser::parse(source),
         }
-    } 
+    }
 
     pub fn execute(&self) -> String {
         let mut mem = Memory::new();
@@ -167,9 +164,9 @@ impl Program {
 
         output
     }
-    
+
     #[cfg(feature = "jit")]
-    pub fn jit_execute(&self) -> Result<()> {
+    pub fn jit_execute(&self) -> JitResult<()> {
         let mut jit = JIT::default();
         let func = jit.compile(&self.ast)?;
         func();

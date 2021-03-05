@@ -78,6 +78,7 @@
 mod parser;
 mod program;
 mod errors;
+#[cfg(feature = "jit")]
 mod jit;
 mod rt;
 pub use program::Program;

@@ -1,19 +1,15 @@
 use std::mem;
 
 use cranelift::{
-    codegen::{
-        entity,
-        ir::{FuncRef, JumpTable, StackSlot},
-    },
-    frontend::Switch,
+    codegen::ir::{FuncRef, JumpTable},
     prelude::*,
 };
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataContext, FuncId, Linkage, Module};
+use cranelift_module::{FuncId, Linkage, Module};
 use itertools::{EitherOrBoth, Itertools};
 
 use super::{
-    errors::Result,
+    errors::jit::JitResult,
     parser::{InsType, Instruction, Register},
     rt::{put_char, put_value},
 };
@@ -23,7 +19,6 @@ const STACK_SIZE: u32 = 128;
 pub struct JIT {
     builder_context: FunctionBuilderContext,
     ctx: codegen::Context,
-    data_ctx: DataContext,
     module: JITModule,
 }
 
@@ -38,14 +33,13 @@ impl Default for JIT {
         Self {
             builder_context: FunctionBuilderContext::new(),
             ctx: module.make_context(),
-            data_ctx: DataContext::new(),
             module,
         }
     }
 }
 
 impl JIT {
-    pub fn compile(&mut self, ast: &[Instruction]) -> Result<fn()> {
+    pub fn compile(&mut self, ast: &[Instruction]) -> JitResult<fn()> {
         let int = self.module.target_config().pointer_type();
 
         // create imported funcs before builder
@@ -162,7 +156,7 @@ impl JIT {
         Ok(unsafe { std::mem::transmute::<_, fn()>(ptr) })
     }
 
-    pub fn make_put_value(&mut self) -> Result<FuncId> {
+    pub fn make_put_value(&mut self) -> JitResult<FuncId> {
         let int = self.module.target_config().pointer_type();
 
         self.ctx.func.signature.params.push(AbiParam::new(int));
@@ -174,7 +168,7 @@ impl JIT {
         Ok(put_value)
     }
 
-    pub fn make_put_char(&mut self) -> Result<FuncId> {
+    pub fn make_put_char(&mut self) -> JitResult<FuncId> {
         let int = self.module.target_config().pointer_type();
         self.ctx.func.signature.params.push(AbiParam::new(int));
 
