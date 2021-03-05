@@ -5,6 +5,9 @@
 [![Crates.io](https://img.shields.io/crates/d/ashpaper-plus)](https://crates.io/crates/ashpaper-plus)
 [![Crates.io](https://img.shields.io/docsrs/ashpaper-plus)](https://docs.rs/ashpaper-plus)
 
+# NOTE:
+this branch is being used for testing of a Cranelift-based JIT interpreter, but is still buggy (for example, right now popping a value from the stack moves the pointer to before the start of the stack and reads some random data, resulting in UB).
+
 # AshPaper Plus
 A fully spec complaint inpterpreter for the Esopo language AshPaper conceived by [William Hicks](https://github.com/wphicks). You can read about it and the Esopo project in Willian Hick's own words [here](https://wphicks.github.io/esopo/). Daniel Temkin also wrote about it on esoteric.codes, you can read that [here](https://esoteric.codes/blog/esopo-turing-complete-poetry). And of course the spec! Checkout that out [here](https://github.com/wphicks/Esopo/blob/master/AshPaper/informal_specs.txt).
 
