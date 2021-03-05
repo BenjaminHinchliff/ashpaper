@@ -1,7 +1,7 @@
 use std::mem;
 
 use cranelift::{
-    codegen::ir::{FuncRef, JumpTable},
+    codegen::ir::{FuncRef, JumpTable, StackSlot},
     prelude::*,
 };
 use cranelift_jit::{JITBuilder, JITModule};
@@ -14,6 +14,15 @@ use super::{
     rt::{put_char, put_value},
 };
 
+#[derive(Debug)]
+struct Stack {
+    stack: StackSlot,
+    ptr: Variable,
+    start: Variable,
+    end: Variable,
+    overflow_trap: Block,
+}
+
 const STACK_SIZE: u32 = 128;
 
 pub struct JIT {
@@ -25,6 +34,7 @@ pub struct JIT {
 impl Default for JIT {
     fn default() -> Self {
         let mut builder = JITBuilder::new(cranelift_module::default_libcall_names());
+        // import runtime functions into jit
         let put_val_addr: *const u8 = unsafe { mem::transmute(put_value as fn(_)) };
         builder.symbol("put_value", put_val_addr);
         let put_char_addr: *const u8 = unsafe { mem::transmute(put_char as fn(_)) };
@@ -48,7 +58,7 @@ impl JIT {
 
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
-        // put value func
+        // declare runtime functions
         let put_val_func = self
             .module
             .declare_func_in_func(put_val_id, &mut builder.func);
@@ -56,37 +66,57 @@ impl JIT {
             .module
             .declare_func_in_func(put_char_id, &mut builder.func);
 
-        // program stack
-        let stack = builder.create_stack_slot(StackSlotData::new(
+        // build stack
+        let stack_byte_size = STACK_SIZE * int.bytes();
+        // create stack parts
+        let stack_slot = builder.create_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
-            STACK_SIZE * int.bytes(),
+            stack_byte_size,
         ));
-
-        let r0 = Variable::new(0);
-        let r1 = Variable::new(1);
-        let top = Variable::new(2);
-        let stack_start = Variable::new(3);
-        builder.declare_var(r0, int);
-        builder.declare_var(r1, int);
-        // top of stack
-        builder.declare_var(top, int);
+        let stack_ptr = Variable::new(0);
+        let stack_start = Variable::new(1);
+        let stack_end = Variable::new(2);
+        // declare stack parts
+        builder.declare_var(stack_ptr, int);
         builder.declare_var(stack_start, int);
+        builder.declare_var(stack_end, int);
 
-        let unreach_trap_block = builder.create_block();
-
+        // create entry block
         let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
+        // define stack parts
+        let stack_ptr_val = builder.ins().stack_addr(int, stack_slot, 0);
+        builder.def_var(stack_ptr, stack_ptr_val);
+        let stack_start_val = builder.use_var(stack_ptr);
+        builder.def_var(stack_start, stack_start_val);
+        let stack_start_val = builder.use_var(stack_ptr);
+        let stack_size_val = builder.ins().iconst(int, stack_byte_size as i64);
+        let stack_end_val = builder.ins().iadd(stack_start_val, stack_size_val);
+        builder.def_var(stack_end, stack_end_val);
+
+        let stack_overflow_trap = builder.create_block();
+
+        let stack = Stack {
+            stack: stack_slot,
+            ptr: stack_ptr,
+            start: stack_start,
+            end: stack_end,
+            overflow_trap: stack_overflow_trap,
+        };
+
+        let r0 = Variable::new(3);
+        let r1 = Variable::new(4);
+
+        builder.declare_var(r0, int);
+        builder.declare_var(r1, int);
+
         let zero1 = builder.ins().iconst(int, 0);
         builder.def_var(r0, zero1);
         let zero2 = builder.ins().iconst(int, 0);
         builder.def_var(r1, zero2);
-        let top_ptr = builder.ins().stack_addr(int, stack, 0);
-        builder.def_var(top, top_ptr);
-        let stack_start_ptr = builder.use_var(top);
-        builder.def_var(stack_start, stack_start_ptr);
 
         let mut jump_table_data = JumpTableData::new();
 
@@ -102,6 +132,16 @@ impl JIT {
 
         // connect entry block to first block
         Self::connect_end(&mut builder, blocks.first().copied());
+
+        // build stack overflow trap block
+        builder.switch_to_block(stack_overflow_trap);
+        builder.seal_block(stack_overflow_trap);
+        builder.ins().trap(TrapCode::StackOverflow);
+
+        // build unreachable trap block
+        let unreach_trap_block = builder.create_block();
+        builder.switch_to_block(unreach_trap_block);
+        builder.ins().trap(TrapCode::UnreachableCodeReached);
 
         if !blocks.is_empty() {
             for (node, block_and_next) in ast
@@ -120,6 +160,7 @@ impl JIT {
                 Self::translate_instruction(
                     node,
                     int,
+                    &stack,
                     jump_table,
                     unreach_trap_block,
                     next,
@@ -128,15 +169,9 @@ impl JIT {
                     put_char_func,
                     r0,
                     r1,
-                    stack_start,
-                    top,
                 );
             }
         }
-
-        builder.switch_to_block(unreach_trap_block);
-        builder.seal_block(unreach_trap_block);
-        builder.ins().trap(TrapCode::UnreachableCodeReached);
 
         builder.seal_all_blocks();
 
@@ -182,16 +217,15 @@ impl JIT {
     fn translate_instruction(
         ins: &Instruction,
         int: Type,
+        stack: &Stack,
         jump_table: JumpTable,
-        trap_block: Block,
+        unreach_trap: Block,
         next_block: Option<Block>,
         builder: &mut FunctionBuilder,
         put_val_func: FuncRef,
         put_char_func: FuncRef,
         r0: Variable,
         r1: Variable,
-        stack_start: Variable,
-        top: Variable,
     ) {
         let Instruction {
             instruction: kind,
@@ -206,33 +240,35 @@ impl JIT {
             Register::Register0 => r1,
             Register::Register1 => r0,
         };
-        let mut connected = false;
         match kind {
             InsType::Store(syl) => {
                 let store_val = builder.ins().iconst(int, *syl as i64);
                 builder.def_var(active_reg, store_val);
+                Self::connect_end(builder, next_block);
             }
             InsType::Negate => {
                 let reg_val = builder.use_var(active_reg);
                 let neg = builder.ins().ineg(reg_val);
                 builder.def_var(active_reg, neg);
+                Self::connect_end(builder, next_block);
             }
             InsType::Multiply => {
                 let active_val = builder.use_var(active_reg);
                 let inactive_val = builder.use_var(inactive_reg);
                 let mult = builder.ins().imul(active_val, inactive_val);
                 builder.def_var(active_reg, mult);
+                Self::connect_end(builder, next_block);
             }
             InsType::Add => {
                 let active_val = builder.use_var(active_reg);
                 let inactive_val = builder.use_var(inactive_reg);
                 let add = builder.ins().iadd(active_val, inactive_val);
                 builder.def_var(active_reg, add);
+                Self::connect_end(builder, next_block);
             }
             InsType::Goto => {
                 let index_val = builder.use_var(active_reg);
-                builder.ins().br_table(index_val, trap_block, jump_table);
-                connected = true;
+                builder.ins().br_table(index_val, unreach_trap, jump_table);
             }
             InsType::ConditionalGoto(syl) => {
                 let syl_val = builder.ins().iconst(int, *syl as i64);
@@ -247,33 +283,18 @@ impl JIT {
 
                 builder.switch_to_block(then_block);
                 let index_val = builder.use_var(inactive_reg);
-                builder.ins().br_table(index_val, trap_block, jump_table);
+                builder.ins().br_table(index_val, unreach_trap, jump_table);
 
                 builder.switch_to_block(merge_block);
+                Self::connect_end(builder, next_block);
             }
-            InsType::Push => Self::translate_push(int, active_reg, builder, top),
+            InsType::Push => {
+                Self::translate_push(int, active_reg, builder, stack);
+                Self::connect_end(builder, next_block);
+            }
             InsType::Pop => {
-                let top_val = builder.use_var(top);
-                let stack_start_val = builder.use_var(stack_start);
-                let comp =
-                    builder
-                        .ins()
-                        .icmp(IntCC::SignedLessThanOrEqual, top_val, stack_start_val);
-                let then_block = builder.create_block();
-                let merge_block = builder.create_block();
-                builder.ins().brnz(comp, merge_block, &[]);
-                builder.ins().jump(then_block, &[]);
-
-                builder.switch_to_block(then_block);
-                let ptr_size = builder.ins().iconst(int, int.bytes() as i64);
-                let dec = builder.ins().isub(top_val, ptr_size);
-                builder.def_var(top, dec);
-                let top_val = builder.use_var(top);
-                let loaded_val = builder.ins().load(int, MemFlags::new(), top_val, 0);
-                builder.def_var(active_reg, loaded_val);
-                builder.ins().jump(merge_block, &[]);
-
-                builder.switch_to_block(merge_block);
+                Self::translate_pop(int, active_reg, builder, stack);
+                Self::connect_end(builder, next_block);
             }
             InsType::ConditionalPush {
                 prev_syllables,
@@ -292,44 +313,67 @@ impl JIT {
 
                 builder.switch_to_block(else_block);
                 let cur_val = builder.ins().iconst(int, *cur_syllables as i64);
-                Self::translate_push_val(int, cur_val, builder, top);
+                Self::translate_push_val(int, cur_val, builder, stack);
                 builder.ins().jump(merge_block, &[]);
 
                 builder.switch_to_block(then_block);
                 let prev_val = builder.ins().iconst(int, *prev_syllables as i64);
-                Self::translate_push_val(int, prev_val, builder, top);
+                Self::translate_push_val(int, prev_val, builder, stack);
                 builder.ins().jump(merge_block, &[]);
+                Self::connect_end(builder, next_block);
             }
             InsType::PrintValue => {
                 let reg_val = builder.use_var(active_reg);
                 builder.ins().call(put_val_func, &[reg_val]);
+                Self::connect_end(builder, next_block);
             }
             InsType::PrintChar => {
                 let reg_val = builder.use_var(active_reg);
                 builder.ins().call(put_char_func, &[reg_val]);
+                Self::connect_end(builder, next_block);
             }
-            InsType::Noop => (),
-        }
-        if !connected {
-            Self::connect_end(builder, next_block);
+            InsType::Noop => Self::connect_end(builder, next_block),
         }
     }
 
-    fn translate_push_val(int: Type, value: Value, builder: &mut FunctionBuilder, top: Variable) {
-        let top_val = builder.use_var(top);
-        builder.ins().store(MemFlags::new(), value, top_val, 0);
+    fn translate_pop(int: Type, reg: Variable, builder: &mut FunctionBuilder, stack: &Stack) {
+        let top_val = builder.use_var(stack.ptr);
+        let stack_start_val = builder.use_var(stack.start);
+        let comp = builder
+            .ins()
+            .icmp(IntCC::SignedLessThanOrEqual, top_val, stack_start_val);
+        let then_block = builder.create_block();
+        let merge_block = builder.create_block();
+        builder.ins().brnz(comp, merge_block, &[]);
+        builder.ins().jump(then_block, &[]);
+
+        builder.switch_to_block(then_block);
+        let ptr_size = builder.ins().iconst(int, int.bytes() as i64);
+        let dec = builder.ins().isub(top_val, ptr_size);
+        builder.def_var(stack.ptr, dec);
+        let top_val = builder.use_var(stack.ptr);
+        let loaded_val = builder.ins().load(int, MemFlags::new(), top_val, 0);
+        builder.def_var(reg, loaded_val);
+        builder.ins().jump(merge_block, &[]);
+
+        builder.switch_to_block(merge_block);
+    }
+
+    fn translate_push_val(int: Type, value: Value, builder: &mut FunctionBuilder, stack: &Stack) {
+        let ptr_val = builder.use_var(stack.ptr);
+        builder.ins().store(MemFlags::new(), value, ptr_val, 0);
         let size = builder.ins().iconst(int, int.bytes() as i64);
-        let inc = builder.ins().iadd(top_val, size);
-        builder.def_var(top, inc);
+        let inc = builder.ins().iadd(ptr_val, size);
+        builder.def_var(stack.ptr, inc);
     }
 
-    fn translate_push(int: Type, reg: Variable, builder: &mut FunctionBuilder, top: Variable) {
+    fn translate_push(int: Type, reg: Variable, builder: &mut FunctionBuilder, stack: &Stack) {
         let store_val = builder.use_var(reg);
-        let top_val = builder.use_var(top);
-        builder.ins().store(MemFlags::new(), store_val, top_val, 0);
+        let ptr_val = builder.use_var(stack.ptr);
+        builder.ins().store(MemFlags::new(), store_val, ptr_val, 0);
         let size = builder.ins().iconst(int, int.bytes() as i64);
-        let inc = builder.ins().iadd(top_val, size);
-        builder.def_var(top, inc);
+        let inc = builder.ins().iadd(ptr_val, size);
+        builder.def_var(stack.ptr, inc);
     }
 
     fn connect_end(builder: &mut FunctionBuilder, next_block: Option<Block>) {
