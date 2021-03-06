@@ -135,7 +135,6 @@ impl JIT {
 
         // build stack overflow trap block
         builder.switch_to_block(stack_overflow_trap);
-        builder.seal_block(stack_overflow_trap);
         builder.ins().trap(TrapCode::StackOverflow);
 
         // build unreachable trap block
@@ -163,6 +162,7 @@ impl JIT {
                     &stack,
                     jump_table,
                     unreach_trap_block,
+                    blocks.len() as i64,
                     next,
                     &mut builder,
                     put_val_func,
@@ -220,6 +220,7 @@ impl JIT {
         stack: &Stack,
         jump_table: JumpTable,
         unreach_trap: Block,
+        max_lines: i64,
         next_block: Option<Block>,
         builder: &mut FunctionBuilder,
         put_val_func: FuncRef,
@@ -267,8 +268,14 @@ impl JIT {
                 Self::connect_end(builder, next_block);
             }
             InsType::Goto => {
-                let index_val = builder.use_var(active_reg);
-                builder.ins().br_table(index_val, unreach_trap, jump_table);
+                Self::translate_goto(
+                    int,
+                    active_reg,
+                    builder,
+                    unreach_trap,
+                    jump_table,
+                    max_lines,
+                );
             }
             InsType::ConditionalGoto(syl) => {
                 let syl_val = builder.ins().iconst(int, *syl as i64);
@@ -282,8 +289,14 @@ impl JIT {
                 builder.ins().jump(merge_block, &[]);
 
                 builder.switch_to_block(then_block);
-                let index_val = builder.use_var(inactive_reg);
-                builder.ins().br_table(index_val, unreach_trap, jump_table);
+                Self::translate_goto(
+                    int,
+                    inactive_reg,
+                    builder,
+                    unreach_trap,
+                    jump_table,
+                    max_lines,
+                );
 
                 builder.switch_to_block(merge_block);
                 Self::connect_end(builder, next_block);
@@ -336,6 +349,37 @@ impl JIT {
         }
     }
 
+    fn translate_goto(
+        int: Type,
+        reg: Variable,
+        builder: &mut FunctionBuilder,
+        unreach_trap: Block,
+        jump_table: JumpTable,
+        max_lines: i64,
+    ) {
+        let index_val = builder.use_var(reg);
+        let abs_block = builder.create_block();
+        builder.append_block_param(abs_block, int);
+        let merge_block = builder.create_block();
+        builder.append_block_param(merge_block, int);
+        let cond = builder.ins().icmp_imm(IntCC::SignedLessThan, index_val, 0);
+        builder.ins().brnz(cond, abs_block, &[index_val]);
+        builder.ins().jump(merge_block, &[index_val]);
+
+        builder.switch_to_block(abs_block);
+        let abs_param = builder.block_params(abs_block)[0];
+        let abs_index_val = builder.ins().ineg(abs_param);
+        builder.ins().jump(merge_block, &[abs_index_val]);
+
+        builder.switch_to_block(merge_block);
+        let abs_index_val = builder.block_params(merge_block)[0];
+        let mod_index_val = builder.ins().srem_imm(abs_index_val, max_lines);
+
+        builder
+            .ins()
+            .br_table(mod_index_val, unreach_trap, jump_table);
+    }
+
     fn translate_pop(int: Type, reg: Variable, builder: &mut FunctionBuilder, stack: &Stack) {
         let top_val = builder.use_var(stack.ptr);
         let stack_start_val = builder.use_var(stack.start);
@@ -366,8 +410,13 @@ impl JIT {
         builder.ins().store(MemFlags::new(), value, ptr_val, 0);
         let size = builder.ins().iconst(int, int.bytes() as i64);
         let end_val = builder.use_var(stack.end);
-        let end_comp = builder.ins().icmp(IntCC::SignedGreaterThan, ptr_val, end_val);
-        builder.ins().brnz(end_comp, stack.overflow_trap, &[]);
+        builder.ins().br_icmp(
+            IntCC::SignedGreaterThan,
+            ptr_val,
+            end_val,
+            stack.overflow_trap,
+            &[],
+        );
         builder.ins().jump(merge_block, &[]);
 
         builder.switch_to_block(merge_block);
@@ -399,7 +448,7 @@ mod tests {
         let source = include_str!("../poems/goto-test.eso");
         let tokens = parser::parse(source);
         let mut jit = JIT::default();
-        jit.compile(&tokens).unwrap();
+        jit.compile(&tokens).unwrap()();
     }
 
     #[test]
@@ -407,7 +456,7 @@ mod tests {
         let source = include_str!("../poems/original-factorial.eso");
         let tokens = parser::parse(source);
         let mut jit = JIT::default();
-        jit.compile(&tokens).unwrap();
+        jit.compile(&tokens).unwrap()();
     }
 
     #[test]
@@ -415,7 +464,7 @@ mod tests {
         let source = include_str!("../poems/stack-test.eso");
         let tokens = parser::parse(source);
         let mut jit = JIT::default();
-        jit.compile(&tokens).unwrap();
+        jit.compile(&tokens).unwrap()();
     }
 
     #[test]
@@ -423,7 +472,7 @@ mod tests {
         let source = include_str!("../poems/cond-goto-test.eso");
         let tokens = parser::parse(source);
         let mut jit = JIT::default();
-        jit.compile(&tokens).unwrap();
+        jit.compile(&tokens).unwrap()();
     }
 
     #[test]
@@ -431,13 +480,13 @@ mod tests {
         let source = include_str!("../poems/math-test.eso");
         let tokens = parser::parse(source);
         let mut jit = JIT::default();
-        jit.compile(&tokens).unwrap();
+        jit.compile(&tokens).unwrap()();
     }
 
     #[test]
     fn empty() {
         let tokens = parser::parse("");
         let mut jit = JIT::default();
-        jit.compile(&tokens).unwrap();
+        jit.compile(&tokens).unwrap()();
     }
 }
