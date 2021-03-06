@@ -408,7 +408,6 @@ impl JIT {
 
         let ptr_val = builder.use_var(stack.ptr);
         builder.ins().store(MemFlags::new(), value, ptr_val, 0);
-        let size = builder.ins().iconst(int, int.bytes() as i64);
         let end_val = builder.use_var(stack.end);
         builder.ins().br_icmp(
             IntCC::SignedGreaterThan,
@@ -420,6 +419,7 @@ impl JIT {
         builder.ins().jump(merge_block, &[]);
 
         builder.switch_to_block(merge_block);
+        let size = builder.ins().iconst(int, int.bytes() as i64);
         let inc = builder.ins().iadd(ptr_val, size);
         builder.def_var(stack.ptr, inc);
     }
