@@ -75,11 +75,11 @@
 //!
 //! ## Some caveats about compliance with the informal spec
 //! - It's entirely possible at this point that some of the implementation deviates from the spec in unintended ways. If you spot anything like that, please raise an issue
-mod parser;
-mod program;
 mod errors;
 #[cfg(feature = "jit")]
 mod jit;
+mod parser;
+mod program;
 mod rt;
-pub use program::Program;
 pub use parser::count_syllables;
+pub use program::Program;
