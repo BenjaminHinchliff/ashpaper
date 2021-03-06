@@ -5,9 +5,6 @@
 [![Crates.io](https://img.shields.io/crates/d/ashpaper-plus)](https://crates.io/crates/ashpaper-plus)
 [![Crates.io](https://img.shields.io/docsrs/ashpaper-plus)](https://docs.rs/ashpaper-plus)
 
-# NOTE:
-this branch is being used for testing of a Cranelift-based JIT interpreter, but is still buggy (for example, right now popping a value from the stack moves the pointer to before the start of the stack and reads some random data, resulting in UB).
-
 # AshPaper Plus
 A fully spec complaint inpterpreter for the Esopo language AshPaper conceived by [William Hicks](https://github.com/wphicks). You can read about it and the Esopo project in Willian Hick's own words [here](https://wphicks.github.io/esopo/). Daniel Temkin also wrote about it on esoteric.codes, you can read that [here](https://esoteric.codes/blog/esopo-turing-complete-poetry). And of course the spec! Checkout that out [here](https://github.com/wphicks/Esopo/blob/master/AshPaper/informal_specs.txt).
 
@@ -15,13 +12,23 @@ A fully spec complaint inpterpreter for the Esopo language AshPaper conceived by
 
 ### CLI
 ```bash
-cargo install --features cli ashpaper-plus
+cargo install --features="cli" ashpaper-plus
+```
+
+#### With JIT Compilation
+```bash
+cargo install --features="cli jit" ashpaper-plus
 ```
 
 ### Library
 add this to your `cargo.toml`
 ```toml
-ashpaper-plus = "0.4"
+ashpaper-plus = "0.5"
+```
+
+#### With JIT Compilation
+```toml
+ashpaper-plus = { version = "0.5", features = ["jit"] }
 ```
 
 ## Usage
@@ -29,9 +36,11 @@ ashpaper-plus = "0.4"
 ### From the CLI
 ```bash
 # execute a program
-ashpaper poems/lovely-poem.eso # prints 24
+ashpaper-plus poems/lovely-poem.eso # prints 24
+# jit execute a program
+ashpaper-plus --jit poems/lovely-poem.eso # prints 24
 # count syllables
-ashpaper -s "hello world, born to think and not to feel" # prints 10
+ashpaper-plus -s "hello world, born to think and not to feel" # prints 10
 ```
 
 ### As a Library
@@ -44,6 +53,8 @@ pub fn main() {
     let fname = "lovely-poem.eso";
     let contents = fs::read_to_string(fname).expect("Something went wrong reading input file!");
     print!("{}", ashpaper::program::execute(&contents));
+    // or for jit compilation:
+    print!("{}", ashpaper::program::jit_execute(&contents).unwrap())
 }
 ```
 
@@ -57,7 +68,7 @@ Will produce the following String:
 Poetry is your program.
 
 You have two registers at your disposal, r0 and r1 which store signed integers (`i64`).
-You also have an stack which can store signed integers (bounds are only that of `Vec<i64>` (`isize::MAX = 9_223_372_036_854_775_807`)).
+You also have an stack which can store signed integers (bounds are only that of `Vec<i64>` (`isize::MAX = 9_223_372_036_854_775_807`), or 128 for the JIT).
 
 The register is chosen based on if a line is indented - if so, r1 and if not r0
 
