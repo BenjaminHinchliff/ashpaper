@@ -1,5 +1,5 @@
 [![.github/workflows/ci.yml](https://github.com/BenjaminHinchliff/ashpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/BenjaminHinchliff/ashpaper/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/BenjaminHinchliff/ashpaper/branch/main/graph/badge.svg?token=SED7QMHHER)](https://codecov.io/gh/BenjaminHinchliff/ashpaper)
+[![codecov](https://codecov.io/gh/BenjaminHinchliff/ashpaper-plus/branch/main/graph/badge.svg?token=SED7QMHHER)](https://codecov.io/gh/BenjaminHinchliff/ashpaper-plus)
 [![Crates.io Version](https://img.shields.io/crates/v/ashpaper-plus)](https://crates.io/crates/ashpaper-plus)
 [![Crates.io](https://img.shields.io/crates/l/ashpaper-plus)](https://crates.io/crates/ashpaper-plus)
 [![Crates.io](https://img.shields.io/crates/d/ashpaper-plus)](https://crates.io/crates/ashpaper-plus)
